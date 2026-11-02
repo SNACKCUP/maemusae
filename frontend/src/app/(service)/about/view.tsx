@@ -1,7 +1,6 @@
 "use client";
 
 import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
@@ -32,7 +31,7 @@ const FAQ = [
   { q: "지금 입력한 데이터는 어디에 저장되나요?", a: "지금은 화면을 확인하기 위한 예시 데이터로 동작하며, 이 브라우저에만 저장돼요. 서버에는 올라가지 않습니다." },
 ];
 
-// 소개: 서비스가 무엇인지 한 페이지로 보여 주는 화면. 스크롤하면 구역이 차례로 떠오른다.
+// 소개: 서비스가 무엇인지 한 페이지로 보여 주는 화면. 등장 순서는 _lib/motion.ts가 맡고, 여기서는 흐르는 띠만 움직인다.
 export default function AboutView() {
   const root = useRef<HTMLElement>(null);
 
@@ -40,13 +39,8 @@ export default function AboutView() {
     const el = root.current;
     if (!el) return;
     if (document.documentElement.dataset.mkMotion === "off" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    gsap.registerPlugin(ScrollTrigger);
     const ctx = gsap.context(() => {
-      gsap.from("[data-hero]", { y: 40, opacity: 0, duration: 0.9, stagger: 0.1, ease: "power4.out" });
       gsap.to("[data-marquee-track]", { xPercent: -50, duration: 32, ease: "none", repeat: -1 });
-      gsap.utils.toArray<HTMLElement>("[data-reveal]").forEach((n) => {
-        gsap.from(n, { y: 48, opacity: 0, duration: 0.8, ease: "power3.out", clearProps: "transform,opacity", scrollTrigger: { trigger: n, start: "top 88%", once: true } });
-      });
     }, el);
     return () => ctx.revert();
   }, []);

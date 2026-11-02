@@ -1,11 +1,9 @@
 "use client";
 
-import { useRef } from "react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 
-import { useReveal } from "../_lib/motion";
 import { Btn, Pill, card } from "../_components/ui";
 
 const FREE = ["프로젝트 등록", "문서 올리기와 AI 요구사항 후보", "근거 문장과 확인 질문", "관리자 확정과 수정 이력", "Excel · PDF 내보내기", "멤버 초대와 권한 관리"];
@@ -27,11 +25,8 @@ const FAQ = [
 
 // 요금제: 무료 플랜만 쓸 수 있다. PRO 버튼은 제공하지 않는 서비스라고 알려 준다.
 export default function PricingView() {
-  const root = useRef<HTMLElement>(null);
-  useReveal(root);
-
   return (
-    <article ref={root} className="mx-auto grid w-full max-w-[1080px] gap-20 sm:gap-28">
+    <article className="mx-auto grid w-full max-w-[1080px] gap-20 sm:gap-28">
       <header className="grid gap-6 pt-4 text-center sm:pt-10">
         <div data-hero className="flex justify-center"><Pill tone="yellow" className="rotate-2 shadow-[2px_2px_0_#111]">✦ Pricing</Pill></div>
         <h1 data-hero className="text-[44px] leading-[1.05] tracking-[-0.05em] sm:text-[84px]">

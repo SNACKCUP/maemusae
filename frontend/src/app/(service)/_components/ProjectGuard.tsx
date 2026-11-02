@@ -20,7 +20,7 @@ interface GuardContext {
 
 function Blocked({ title, body, login }: { title: string; body: string; login?: boolean }) {
   return (
-    <div className={`${card} mx-auto max-w-lg text-center`} role="alert">
+    <div data-rise className={`${card} mx-auto max-w-lg text-center`} role="alert">
       <h2 className="text-2xl font-extrabold tracking-tight">{title}</h2>
       <p className="mx-auto mt-2 text-sm text-[#6c6a62]">{body}</p>
       {login ? <Btn href="/login" variant="dark" className="mt-6">로그인</Btn> : <Btn href="/projects" variant="dark" className="mt-6">프로젝트 목록으로</Btn>}

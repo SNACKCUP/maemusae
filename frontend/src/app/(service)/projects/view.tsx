@@ -47,7 +47,7 @@ export default function ProjectsPage() {
   if (auth.isLoading || (auth.isAuthenticated && isLoading)) return <div className="h-[40vh]" aria-busy />;
   if (!auth.isAuthenticated)
     return (
-      <div className={`${card} mx-auto grid max-w-lg justify-items-center gap-4 py-12 text-center`}>
+      <div data-rise className={`${card} mx-auto grid max-w-lg justify-items-center gap-4 py-12 text-center`}>
         <h2 className="text-2xl font-extrabold tracking-tight">로그인하고 프로젝트를 시작하세요</h2>
         <p className="text-sm text-[#6c6a62]">프로젝트는 로그인한 멤버만 볼 수 있어요.</p>
         <div className="flex gap-2"><Btn href="/login" variant="dark">로그인</Btn><Btn href="/signup">회원가입</Btn></div>

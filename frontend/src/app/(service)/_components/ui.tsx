@@ -33,7 +33,7 @@ export function Pill({ tone = "plain", className, children }: { tone?: "plain" |
 
 export function PageHead({ eyebrow, title, light, children }: { eyebrow?: string; title: ReactNode; light?: string; children?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-4" data-rise>
+    <div className="flex flex-wrap items-end justify-between gap-4" data-title>
       <div>
         {eyebrow && <p className="mb-3 text-xs font-extrabold uppercase tracking-[0.12em] text-[#6c6a62]">{eyebrow}</p>}
         <h1 className="text-[34px] leading-[1.1] tracking-[-0.03em] sm:text-[44px]">

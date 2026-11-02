@@ -18,7 +18,7 @@ const SECTIONS: { id: string; label: string; icon: LucideIcon }[] = [
 // 설정 한 덩어리: 왼쪽에 제목과 설명, 오른쪽에 내용 (좁은 화면에서는 위아래)
 function Section({ id, title, desc, danger, children }: { id: string; title: string; desc: string; danger?: boolean; children: ReactNode }) {
   return (
-    <section id={id} aria-labelledby={`${id}-h`} className="grid scroll-mt-32 gap-4 xl:grid-cols-[240px_1fr] xl:gap-10">
+    <section id={id} aria-labelledby={`${id}-h`} data-rise className="grid scroll-mt-32 gap-4 xl:grid-cols-[240px_1fr] xl:gap-10">
       <div>
         <h2 id={`${id}-h`} className={cn("text-xl font-extrabold tracking-tight", danger && "text-[#b3261e]")}>{title}</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-[#6c6a62]">{desc}</p>
@@ -85,7 +85,7 @@ export default function MyPage() {
   if (isLoading) return <div className="h-[40vh]" aria-busy />;
   if (!isAuthenticated || !user)
     return (
-      <div className={`${card} mx-auto grid max-w-lg justify-items-center gap-4 py-12 text-center`}>
+      <div data-rise className={`${card} mx-auto grid max-w-lg justify-items-center gap-4 py-12 text-center`}>
         <h2 className="text-2xl font-extrabold tracking-tight">로그인이 필요해요</h2>
         <p className="text-sm text-[#6c6a62]">마이페이지는 로그인한 멤버만 볼 수 있어요.</p>
         <div className="flex gap-2"><Btn href="/login" variant="dark">로그인</Btn><Btn href="/signup">회원가입</Btn></div>
@@ -105,7 +105,7 @@ export default function MyPage() {
       </PageHead>
 
       <div className="grid gap-8 lg:grid-cols-[200px_1fr] lg:gap-12">
-        <nav aria-label="설정 구역" className="lg:sticky lg:top-32 lg:self-start">
+        <nav aria-label="설정 구역" data-side className="lg:sticky lg:top-32 lg:self-start">
           <ul className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
             {SECTIONS.map(({ id, label, icon: Icon }) => (
               <li key={id} className="shrink-0">

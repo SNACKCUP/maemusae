@@ -1,10 +1,7 @@
 "use client";
 
-import { useRef } from "react";
-
 import { cn } from "@/lib/utils";
 
-import { useReveal } from "../_lib/motion";
 import { Btn, Pill, card } from "../_components/ui";
 
 const STEPS = [
@@ -104,11 +101,8 @@ const TROUBLE = [
 
 // 사용 가이드: 왼쪽 목차(큰 화면)와 여섯 단계. 각 단계에 화면 모양을 흉내 낸 그림을 붙였다.
 export default function GuideView() {
-  const root = useRef<HTMLElement>(null);
-  useReveal(root);
-
   return (
-    <article ref={root} className="mx-auto grid w-full max-w-[1100px] gap-16">
+    <article className="mx-auto grid w-full max-w-[1100px] gap-16">
       <header className="grid gap-6 pt-4 sm:pt-10">
         <div data-hero><Pill tone="yellow" className="-rotate-2 shadow-[2px_2px_0_#111]">✦ Guide</Pill></div>
         <h1 data-hero className="text-[44px] leading-[1.05] tracking-[-0.05em] sm:text-[84px]">
@@ -119,7 +113,7 @@ export default function GuideView() {
       </header>
 
       <div className="grid items-start gap-10 lg:grid-cols-[200px_1fr]">
-        <nav aria-label="가이드 목차" className="lg:sticky lg:top-8">
+        <nav aria-label="가이드 목차" data-side className="lg:sticky lg:top-32">
           <ol className="flex flex-wrap gap-2 lg:grid">
             {STEPS.map((s) => (
               <li key={s.id}><a href={`#${s.id}`} className="inline-flex items-center gap-2 rounded-full border-2 border-transparent px-3 py-1.5 text-[13px] font-semibold transition-colors hover:border-[#111] hover:bg-[#f2f69a]"><span className="text-[#ff5a14]">{s.no}</span>{s.title}</a></li>
@@ -129,7 +123,7 @@ export default function GuideView() {
 
         <div className="grid gap-8">
           {STEPS.map((s) => (
-            <section key={s.id} id={s.id} data-reveal className={cn(card, "grid scroll-mt-8 gap-6 sm:p-8 md:grid-cols-[1.25fr_0.75fr]")}>
+            <section key={s.id} id={s.id} data-reveal className={cn(card, "grid scroll-mt-32 gap-6 sm:p-8 md:grid-cols-[1.25fr_0.75fr]")}>
               <div className="grid content-start gap-4">
                 <span className="grid size-11 place-items-center rounded-full border-2 border-[#111] bg-[#ff5a14] font-extrabold text-white">{s.no}</span>
                 <h2 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{s.title}</h2>
