@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 export const card = "rounded-[24px] border-2 border-[#111] bg-white p-6 shadow-[5px_5px_0_#111]";
 export const pill = "inline-flex items-center whitespace-nowrap rounded-full border-[1.5px] border-[#111] px-3 py-1 text-xs font-medium";
 
-const btnBase = "inline-flex items-center justify-center gap-2 rounded-full border-2 border-[#111] font-semibold shadow-[3px_3px_0_#111] transition-[transform,box-shadow] duration-150 enabled:hover:-translate-x-0.5 enabled:hover:-translate-y-0.5 enabled:hover:shadow-[5px_5px_0_#111] enabled:active:translate-x-0.5 enabled:active:translate-y-0.5 enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none";
+const btnBase = "inline-flex items-center justify-center gap-2 rounded-full border-2 border-[#111] font-semibold shadow-[3px_3px_0_#111] transition-[transform,box-shadow] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] enabled:hover:-translate-x-0.5 enabled:hover:-translate-y-1 enabled:hover:scale-[1.04] enabled:hover:shadow-[6px_6px_0_#111] enabled:active:translate-x-0.5 enabled:active:translate-y-0.5 enabled:active:scale-95 enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none";
 const variants = {
   primary: "bg-[#ff5a14] text-white",
   dark: "bg-[#111] text-white",

@@ -10,7 +10,7 @@ export function useRise(ref: RefObject<HTMLElement | null>, key?: unknown) {
     if (!scope) return;
     if (document.documentElement.dataset.mkMotion === "off" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const ctx = gsap.context(() => {
-      gsap.from("[data-rise]", { y: 22, opacity: 0, duration: 0.7, stagger: 0.07, ease: "power3.out", clearProps: "transform,opacity" });
+      gsap.from("[data-rise]", { y: 36, scale: 0.94, opacity: 0, duration: 0.8, stagger: 0.09, ease: "back.out(1.7)", clearProps: "transform,opacity" });
     }, scope);
     return () => ctx.revert();
   }, [ref, key]);
@@ -28,9 +28,9 @@ export function useReveal(ref: RefObject<HTMLElement | null>) {
       if (cancelled) return;
       gsap.registerPlugin(ScrollTrigger);
       ctx = gsap.context(() => {
-        gsap.from("[data-hero]", { y: 40, opacity: 0, duration: 0.9, stagger: 0.1, ease: "power4.out" });
+        gsap.from("[data-hero]", { y: 50, scale: 0.92, opacity: 0, duration: 1, stagger: 0.12, ease: "back.out(1.6)" });
         gsap.utils.toArray<HTMLElement>("[data-reveal]").forEach((n) => {
-          gsap.from(n, { y: 48, opacity: 0, duration: 0.8, ease: "power3.out", clearProps: "transform,opacity", scrollTrigger: { trigger: n, start: "top 88%", once: true } });
+          gsap.from(n, { y: 56, scale: 0.95, opacity: 0, duration: 0.9, ease: "back.out(1.5)", clearProps: "transform,opacity", scrollTrigger: { trigger: n, start: "top 88%", once: true } });
         });
       }, scope);
     });

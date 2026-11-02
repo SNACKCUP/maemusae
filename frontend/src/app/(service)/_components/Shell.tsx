@@ -68,11 +68,11 @@ export function Shell({ children }: { children: ReactNode }) {
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600;800&display=swap" />
       <div className="flex min-h-[calc(100vh-1.5rem)] w-full flex-col overflow-x-clip rounded-[32px] bg-[#f6f6f3] px-5 pb-8 pt-5 sm:min-h-[calc(100vh-3rem)] sm:px-12 sm:pt-7 print:min-h-0 print:rounded-none print:bg-white print:p-0">
-        <header className="print:hidden grid items-center gap-x-5 gap-y-3 rounded-[28px] border-2 border-[#111] bg-white px-4 py-2.5 shadow-[5px_5px_0_#111] lg:rounded-full lg:pl-6 lg:pr-3 lg:grid-cols-[1fr_auto_1fr]">
+        <header className="print:hidden md:sticky md:top-6 md:z-40 grid items-center gap-x-5 gap-y-3 rounded-[28px] border-2 border-[#111] bg-white px-4 py-2.5 shadow-[5px_5px_0_#111] lg:rounded-full lg:pl-6 lg:pr-3 lg:grid-cols-[1fr_auto_1fr]">
           <Link href="/" aria-label="매무새 홈" className="flex w-fit items-center"><Logo /></Link>
           <nav className="flex flex-wrap items-center gap-2 text-[13px] lg:justify-self-center" aria-label="주요 메뉴">
             {NAV.map((n) => (
-              <Link key={n.href} href={n.href} aria-current={path.startsWith(n.href) ? "page" : undefined} className={cn("rounded-full border-2 px-3.5 py-1 font-semibold transition-colors", path.startsWith(n.href) ? "border-[#111] bg-[#f2f69a]" : "border-transparent hover:border-[#111]")}>{n.label}</Link>
+              <Link key={n.href} href={n.href} aria-current={path.startsWith(n.href) ? "page" : undefined} className={cn("rounded-full border-2 px-3.5 py-1 font-semibold transition-[transform,background-color,border-color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-0.5 hover:scale-105 active:scale-95", path.startsWith(n.href) ? "border-[#111] bg-[#f2f69a]" : "border-transparent hover:border-[#111] hover:bg-white")}>{n.label}</Link>
             ))}
           </nav>
           <div className="flex flex-wrap items-center gap-2 lg:justify-self-end">

@@ -18,15 +18,35 @@ const SECTIONS: { id: string; label: string; icon: LucideIcon }[] = [
 // 설정 한 덩어리: 왼쪽에 제목과 설명, 오른쪽에 내용 (좁은 화면에서는 위아래)
 function Section({ id, title, desc, danger, children }: { id: string; title: string; desc: string; danger?: boolean; children: ReactNode }) {
   return (
-    <section id={id} aria-labelledby={`${id}-h`} className="grid scroll-mt-8 gap-4 xl:grid-cols-[240px_1fr] xl:gap-10">
+    <section id={id} aria-labelledby={`${id}-h`} className="grid scroll-mt-32 gap-4 xl:grid-cols-[240px_1fr] xl:gap-10">
       <div>
         <h2 id={`${id}-h`} className={cn("text-xl font-extrabold tracking-tight", danger && "text-[#b3261e]")}>{title}</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-[#6c6a62]">{desc}</p>
       </div>
-      <div className={cn(card, "min-w-0", danger && "border-[#b3261e] shadow-[5px_5px_0_#b3261e]")}>{children}</div>
+      <div className={cn(card, "min-w-0", SUBMIT_BUTTON, AVATAR_BUTTONS, danger && `border-[#b3261e] shadow-[5px_5px_0_#b3261e] ${DANGER_BUTTON}`)}>{children}</div>
     </section>
   );
 }
+
+// 킷 폼의 제출 버튼(비밀번호 변경·저장·탈퇴)을 매무새 버튼 모양으로 바꾸고 오른쪽 끝으로 보낸다
+const SUBMIT_BUTTON = [
+  "[&_button[type=submit]]:justify-self-end [&_button[type=submit]]:rounded-full [&_button[type=submit]]:border-2 [&_button[type=submit]]:border-[#111]",
+  "[&_button[type=submit]]:bg-[#111] [&_button[type=submit]]:px-6 [&_button[type=submit]]:font-semibold [&_button[type=submit]]:text-white",
+  "[&_button[type=submit]]:shadow-[3px_3px_0_#111] [&_button[type=submit]]:transition-[transform,box-shadow] [&_button[type=submit]]:duration-300",
+  "[&_button[type=submit]]:ease-[cubic-bezier(0.34,1.56,0.64,1)] [&_button[type=submit]:enabled]:hover:-translate-y-1 [&_button[type=submit]:enabled]:hover:scale-[1.04]",
+  "[&_button[type=submit]:enabled]:hover:shadow-[6px_6px_0_#111] [&_button[type=submit]:enabled]:active:scale-95 [&_button[type=submit]:enabled]:active:shadow-none",
+  "[&_button[type=submit]:disabled]:opacity-40 [&_button[type=submit]:disabled]:shadow-none",
+].join(" ");
+// 탈퇴는 빨간색으로 한 번 더 경고한다
+const DANGER_BUTTON = "[&_button[type=submit]]:bg-[#b3261e] [&_button[type=submit]]:shadow-[3px_3px_0_#111]";
+// 프로필 이미지 [삭제]는 글자 버튼이 아니라 테두리 있는 작은 버튼으로
+const AVATAR_BUTTONS = [
+  "[&_[data-slot=avatar-change]]:rounded-full [&_[data-slot=avatar-change]]:border-2 [&_[data-slot=avatar-change]]:border-[#111] [&_[data-slot=avatar-change]]:bg-white [&_[data-slot=avatar-change]]:font-semibold",
+  "[&_[data-slot=avatar-remove]]:rounded-full [&_[data-slot=avatar-remove]]:border-2 [&_[data-slot=avatar-remove]]:border-[#b3261e] [&_[data-slot=avatar-remove]]:bg-white [&_[data-slot=avatar-remove]]:font-semibold [&_[data-slot=avatar-remove]]:text-[#b3261e]",
+  "[&_[data-slot=avatar-change]]:transition-transform [&_[data-slot=avatar-remove]]:transition-transform [&_[data-slot=avatar-change]]:duration-300 [&_[data-slot=avatar-remove]]:duration-300 [&_[data-slot=avatar-change]]:ease-[cubic-bezier(0.34,1.56,0.64,1)] [&_[data-slot=avatar-remove]]:ease-[cubic-bezier(0.34,1.56,0.64,1)]",
+  "[&_[data-slot=avatar-change]:enabled]:hover:scale-105 [&_[data-slot=avatar-remove]:enabled]:hover:scale-105 [&_[data-slot=avatar-change]:enabled]:active:scale-95 [&_[data-slot=avatar-remove]:enabled]:active:scale-95",
+  "[&_[data-slot=avatar-remove]:enabled]:hover:bg-[#ffd2b8]",
+].join(" ");
 
 const Divider = () => <hr className="my-6 border-[#111]/15" />;
 
@@ -45,7 +65,15 @@ function useActiveSection() {
       const el = document.getElementById(s.id);
       if (el) io.observe(el);
     });
-    return () => io.disconnect();
+    // 맨 아래까지 내려가면 마지막 구역이 읽는 구역이다 (짧은 마지막 구역은 위 검사에 걸리지 않는다)
+    const onScroll = () => {
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 8) setActive(SECTIONS[SECTIONS.length - 1].id);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      io.disconnect();
+      window.removeEventListener("scroll", onScroll);
+    };
   }, []);
   return [active, setActive] as const;
 }
@@ -71,13 +99,13 @@ export default function MyPage() {
   };
 
   return (
-    <div className="grid gap-10">
+    <div className="mx-auto grid w-full max-w-[1100px] gap-16">
       <PageHead eyebrow="Account settings" light="내" title="마이페이지">
         <Pill tone="yellow">{user.email}</Pill>
       </PageHead>
 
       <div className="grid gap-8 lg:grid-cols-[200px_1fr] lg:gap-12">
-        <nav aria-label="설정 구역" className="lg:sticky lg:top-8 lg:self-start">
+        <nav aria-label="설정 구역" className="lg:sticky lg:top-32 lg:self-start">
           <ul className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
             {SECTIONS.map(({ id, label, icon: Icon }) => (
               <li key={id} className="shrink-0">
@@ -86,7 +114,7 @@ export default function MyPage() {
                   onClick={() => go(id)}
                   aria-current={active === id ? "true" : undefined}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-full border-2 px-4 py-2 text-left text-[13px] font-semibold transition-colors",
+                    "flex w-full items-center gap-2.5 rounded-full border-2 px-4 py-2 text-left text-[13px] font-semibold transition-[transform,background-color,border-color] duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:translate-x-1 active:scale-95",
                     active === id ? "border-[#111] bg-[#f2f69a]" : "border-transparent text-[#6c6a62] hover:bg-[#ebeae4] hover:text-[#111]",
                     id === "danger" && active !== id && "hover:text-[#b3261e]",
                   )}
@@ -98,15 +126,14 @@ export default function MyPage() {
           </ul>
         </nav>
 
-        <div className="grid min-w-0 gap-14">
+        <div className="grid min-w-0 gap-14 pb-24 lg:pb-32">
           <Section id="profile" title="프로필" desc="다른 멤버에게 보이는 이름과 사진, 연락처를 관리해요.">
             <div className="flex flex-wrap items-center gap-4">
-              <MeAvatarField />
+              <MeAvatarField showHint={false} />
               <div className="min-w-0">
                 <p className="truncate text-lg font-extrabold">{name}</p>
                 <p className="truncate text-sm text-[#6c6a62]">{user.email}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  {user.roles.map((r) => <Pill key={r.id} tone="yellow" className="px-2 py-0.5 text-[10px]">{r.name}</Pill>)}
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   <span className="text-xs text-[#6c6a62]">가입일 {user.created_at.slice(0, 10)}</span>
                 </div>
               </div>

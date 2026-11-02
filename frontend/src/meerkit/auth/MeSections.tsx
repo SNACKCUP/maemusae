@@ -19,12 +19,12 @@ const rethrow = (e: unknown): never => {
 };
 
 /** 프로필 이미지 올리기·지우기 */
-export function MeAvatarField() {
+export function MeAvatarField({ showHint = true }: { showHint?: boolean } = {}) {
   const { user } = useAuth();
   const upload = useUploadAvatar();
   const removeAvatar = useRemoveAvatar();
   if (!user) return null;
-  return <ProfileImageField user={user} onUpload={(file) => upload.mutateAsync(file).catch(rethrow)} onRemove={() => removeAvatar.mutateAsync().catch(rethrow)} />;
+  return <ProfileImageField user={user} onUpload={(file) => upload.mutateAsync(file).catch(rethrow)} onRemove={() => removeAvatar.mutateAsync().catch(rethrow)} showHint={showHint} />;
 }
 
 /** 닉네임 바꾸기. 설정에서 닉네임을 쓰지 않으면 아무것도 그리지 않는다 */
