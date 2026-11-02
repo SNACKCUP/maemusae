@@ -78,7 +78,7 @@ export function Shell({ children }: { children: ReactNode }) {
             {isLoading ? (
               <span className="h-9 w-24 rounded-full bg-[#ebeae4]" aria-busy />
             ) : user ? (
-              <UserMenu user={user} onLogout={onLogout} />
+              <UserMenu user={user} onLogout={onLogout} items={[{ label: "마이페이지", href: "/maemusae/mypage" }]} />
             ) : (
               <span className="flex items-center gap-1 text-[12px] font-semibold"><Link href="/maemusae/login" className="rounded-full px-3 py-1.5 hover:bg-[#ebeae4]">로그인</Link><Link href="/maemusae/signup" className="rounded-full border-2 border-[#111] bg-[#ff5a14] px-3.5 py-1 text-white shadow-[2px_2px_0_#111] transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-[3px_3px_0_#111]">회원가입</Link></span>
             )}
