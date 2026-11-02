@@ -2,6 +2,8 @@
 
 import { toast } from "sonner";
 
+import { Plus } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 import { Btn, Pill, card } from "../_components/ui";
@@ -81,7 +83,7 @@ export default function PricingView() {
           <details key={f.q} data-reveal className="group rounded-[20px] border-2 border-[#111] bg-white px-6 py-4 shadow-[4px_4px_0_#111] open:bg-[#f2f69a]">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-bold [&::-webkit-details-marker]:hidden">
               {f.q}
-              <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full border-2 border-[#111] bg-white text-lg leading-none transition-transform group-open:rotate-45">+</span>
+              <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full border-2 border-[#111] bg-white transition-transform group-open:rotate-45"><Plus className="size-4" strokeWidth={2.5} /></span>
             </summary>
             <p className="pt-3 text-sm leading-relaxed text-[#55534c]">{f.a}</p>
           </details>

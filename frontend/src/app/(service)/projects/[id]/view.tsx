@@ -126,17 +126,17 @@ function MemberProfiles({ projectId, count, isAdmin }: { projectId: string; coun
         <h2 id="members" className="text-xl font-extrabold tracking-tight">멤버 {count}명</h2>
         {isAdmin && <Btn size="sm" href={`/projects/${projectId}/members`}>관리</Btn>}
       </div>
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {sorted.map((m) => (
-          <li key={m.id} className={cn(card, "flex items-center gap-4 p-4")}>
+          <li key={m.id} className={cn(card, "grid content-start gap-4 p-5")}>
             <UserAvatar user={{ name: m.name, nickname: null, avatar_url: null }} size="lg" className="size-14 border-2 border-[#111] text-lg" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-base font-extrabold">{m.name}</p>
-              <p className="truncate text-xs text-[#6c6a62]">@{m.user_id}</p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <Pill tone={m.role === "ADMIN" ? "orange" : "plain"} className="px-2 py-0.5 text-[11px]">{ROLE_LABEL[m.role]}</Pill>
-                <span className="text-[11px] text-[#6c6a62]">{fmtDate(m.joined_at)} 합류</span>
-              </div>
+            <div className="min-w-0">
+              <p className="flex min-w-0 items-center gap-2">
+                <Pill tone={m.role === "ADMIN" ? "orange" : "plain"} className="shrink-0 px-2 py-0.5 text-[11px]">{ROLE_LABEL[m.role]}</Pill>
+                <span className="truncate text-base font-extrabold">{m.name}</span>
+              </p>
+              <p className="mt-1 truncate text-xs text-[#6c6a62]">@{m.user_id}</p>
+              <p className="mt-0.5 text-[11px] text-[#6c6a62]">{fmtDate(m.joined_at)} 합류</p>
             </div>
           </li>
         ))}

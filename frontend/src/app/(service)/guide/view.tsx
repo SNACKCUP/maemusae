@@ -1,5 +1,7 @@
 "use client";
 
+import { Plus } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 import { Btn, Pill, card } from "../_components/ui";
@@ -178,7 +180,7 @@ export default function GuideView() {
         <div className="grid gap-4">
           {TROUBLE.map(([q, a]) => (
             <details key={q} data-reveal className="group rounded-[20px] border-2 border-[#111] bg-white px-6 py-4 shadow-[4px_4px_0_#111] open:bg-[#f2f69a]">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-bold [&::-webkit-details-marker]:hidden">{q}<span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full border-2 border-[#111] bg-white text-lg leading-none transition-transform group-open:rotate-45">+</span></summary>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-bold [&::-webkit-details-marker]:hidden">{q}<span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full border-2 border-[#111] bg-white transition-transform group-open:rotate-45"><Plus className="size-4" strokeWidth={2.5} /></span></summary>
               <p className="pt-3 text-sm leading-relaxed text-[#55534c]">{a}</p>
             </details>
           ))}
