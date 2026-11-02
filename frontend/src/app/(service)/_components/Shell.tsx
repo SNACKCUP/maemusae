@@ -5,11 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 
-import { UserMenu, useAuth, useLogout } from "@/meerkit";
+import { useAuth, useLogout } from "@/meerkit";
 import { cn } from "@/lib/utils";
 
 import { useRise } from "../_lib/motion";
 import { THEME_STYLE, THEME_VARS } from "../_lib/theme";
+import { AccountMenu } from "./AccountMenu";
 import { Logo } from "./Logo";
 
 const NAV = [
@@ -78,7 +79,7 @@ export function Shell({ children }: { children: ReactNode }) {
             {isLoading ? (
               <span className="h-9 w-24 rounded-full bg-[#ebeae4]" aria-busy />
             ) : user ? (
-              <UserMenu user={user} onLogout={onLogout} />
+              <AccountMenu user={user} onLogout={onLogout} />
             ) : (
               <span className="flex items-center gap-1 text-[12px] font-semibold"><Link href="/login" className="rounded-full px-3 py-1.5 hover:bg-[#ebeae4]">로그인</Link><Link href="/signup" className="rounded-full border-2 border-[#111] bg-[#ff5a14] px-3.5 py-1 text-white shadow-[2px_2px_0_#111] transition-[transform,box-shadow] hover:-translate-x-px hover:-translate-y-px hover:shadow-[3px_3px_0_#111]">회원가입</Link></span>
             )}

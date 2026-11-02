@@ -7,18 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { errorMessage } from "../api/error";
 import { meerkitConfig } from "../config";
-import { ChangePasswordForm } from "./components/ChangePasswordForm";
-import { NicknameForm } from "./components/NicknameForm";
-import { ProfileForm } from "./components/ProfileForm";
-import { ProfileImageField } from "./components/ProfileImageField";
 import { RoleBadges } from "./components/RoleBadges";
 import { displayName } from "./components/UserAvatar";
-import { WithdrawForm } from "./components/WithdrawForm";
 import { RequireAuth } from "./guards/RequireAuth";
 import { useAuth } from "./hooks";
-import { useChangePassword, useRemoveAvatar, useSendEmailCode, useUpdateNickname, useUpdateProfile, useUploadAvatar, useVerifyEmailCode, useWithdraw } from "./mutations";
+import { MeAvatarField, MeNicknameForm, MePasswordForm, MeProfileForm, MeWithdrawForm } from "./MeSections";
 
 export interface MePageTab {
   value: string;
@@ -37,24 +31,10 @@ export interface MePageProps {
 
 const date = (iso: string) => iso.slice(0, 10);
 
-// 부품이 보여 줄 수 있게 서버 오류를 문구가 담긴 Error로 바꿔 다시 던진다
-const rethrow = (e: unknown): never => {
-  throw new Error(errorMessage(e) ?? "이미지를 처리하지 못했습니다.");
-};
-
 function MeContent({ title = "내 정보", extraTabs = [], embedded = false }: MePageProps) {
   const { user } = useAuth();
-  const update = useUpdateProfile();
-  const change = useChangePassword();
-  const nick = useUpdateNickname();
-  const withdraw = useWithdraw();
-  const sendCode = useSendEmailCode();
-  const verifyCode = useVerifyEmailCode();
-  const upload = useUploadAvatar();
-  const removeAvatar = useRemoveAvatar();
   const router = useRouter();
   if (!user) return null;
-  const nicknameOn = meerkitConfig.signup.optionalFields.includes("nickname");
 
   const Root = embedded ? "div" : "main";
   return (
@@ -75,7 +55,7 @@ function MeContent({ title = "내 정보", extraTabs = [], embedded = false }: M
       </div>
       <Card className="mb-4">
         <CardContent className="grid gap-5">
-          <ProfileImageField user={user} onUpload={(file) => upload.mutateAsync(file).catch(rethrow)} onRemove={() => removeAvatar.mutateAsync().catch(rethrow)} />
+          <MeAvatarField />
           <div className="min-w-0">
             <p className="truncate text-xl font-semibold">{displayName(user)}</p>
             <p className="truncate text-sm text-muted-foreground">{user.email}</p>
@@ -85,18 +65,9 @@ function MeContent({ title = "내 정보", extraTabs = [], embedded = false }: M
             </div>
           </div>
         </CardContent>
-        {nicknameOn && (
-          <CardContent className="mt-5 border-t pt-5">
-            <NicknameForm
-              key={user.nickname ?? ""}
-              user={user}
-              onSubmit={(nickname) => nick.mutateAsync(nickname)}
-              pending={nick.isPending}
-              error={errorMessage(nick.error)}
-              generator={meerkitConfig.signup.nickname.generator}
-            />
-          </CardContent>
-        )}
+        <CardContent className="mt-5 border-t pt-5 empty:hidden">
+          <MeNicknameForm />
+        </CardContent>
       </Card>
 
       <Tabs defaultValue={extraTabs[0]?.value ?? "profile"}>
@@ -110,32 +81,13 @@ function MeContent({ title = "내 정보", extraTabs = [], embedded = false }: M
           <CardContent>
             {extraTabs.map((x) => <TabsContent key={x.value} value={x.value} className="mk-swap">{x.content}</TabsContent>)}
             <TabsContent value="profile" className="mk-swap">
-              <ProfileForm
-                key={user.updated_at}
-                user={user}
-                onSubmit={update.mutate}
-                pending={update.isPending}
-                error={errorMessage(update.error)}
-                optionalFields={meerkitConfig.signup.optionalFields.filter((f) => f !== "nickname")}
-                addressType={meerkitConfig.signup.addressType}
-                nameRange={meerkitConfig.signup.name}
-                phoneInput={meerkitConfig.signup.phoneInput}
-                addressSearch={meerkitConfig.signup.addressSearch}
-                emailVerification={
-                  meerkitConfig.signup.emailVerification
-                    ? {
-                        sendCode: (email) => sendCode.mutateAsync({ email }),
-                        verifyCode: async (email, code) => (await verifyCode.mutateAsync({ email, code })).token,
-                      }
-                    : undefined
-                }
-              />
+              <MeProfileForm />
             </TabsContent>
             <TabsContent value="password" className="mk-swap">
-              <ChangePasswordForm onSubmit={change.mutate} pending={change.isPending} error={errorMessage(change.error)} />
+              <MePasswordForm />
             </TabsContent>
             <TabsContent value="withdraw" className="mk-swap">
-              <WithdrawForm onSubmit={withdraw.mutate} pending={withdraw.isPending} error={errorMessage(withdraw.error)} />
+              <MeWithdrawForm />
             </TabsContent>
           </CardContent>
         </Card>
