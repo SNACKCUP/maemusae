@@ -19,3 +19,9 @@ export const ROLE_LABEL = { ADMIN: "관리자", MEMBER: "일반" } as const;
 
 export const DOC_KINDS = ["요구사항정의서", "기능정의서", "중간보고서"] as const;
 export const revisionLabel = (revision: number) => (revision <= 1 ? "확정" : `수정 후 확정 (v${revision})`);
+
+/** 문서 진행률(%). 서버 상태에서 정한 대략의 단계다 */
+export const DOC_PROGRESS: Record<DocStatus, number> = { empty: 0, analyzing: 20, ready: 50, confirming: 80, confirmed: 100 };
+
+/** 지금 쓸 수 있는 문서 종류. 프로젝트 카드의 문서 칩은 여기 있는 것만 보여 준다 (기능정의서·중간보고서는 준비되면 추가) */
+export const READY_DOC_KINDS: { kind: string; label: string }[] = [{ kind: "REQUIREMENTS", label: "요구사항정의서" }];

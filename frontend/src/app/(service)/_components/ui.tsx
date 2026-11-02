@@ -51,6 +51,15 @@ export function fmtDate(iso: string) {
   return `${y}.${m}.${d}`;
 }
 export const fmtRange = (a: string, b: string) => `${fmtDate(a)} – ${fmtDate(b)}`;
+// "방금 전", "3시간 전", "5일 전"처럼 지난 시간. 한 달이 넘으면 날짜로 보여 준다
+export function fmtAgo(iso: string, now = Date.now()) {
+  const sec = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
+  if (sec < 60) return "방금 전";
+  if (sec < 3600) return `${Math.floor(sec / 60)}분 전`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}시간 전`;
+  if (sec < 86400 * 30) return `${Math.floor(sec / 86400)}일 전`;
+  return fmtDate(iso);
+}
 export function fmtTime(iso: string) {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;

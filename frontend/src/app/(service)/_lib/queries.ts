@@ -139,12 +139,12 @@ export function useRequirementsDoc(id: string) {
   return { ...q, data: q.data?.find((d) => d.kind === "REQUIREMENTS") };
 }
 
-/** 프로젝트 목록 카드용: 프로젝트마다 요구사항정의서 상태 (id → 서버 상태) */
-export function useRequirementsDocStatuses(ids: string[]) {
+/** 프로젝트 목록 카드용: 프로젝트마다 문서 목록 (id → 문서들). 문서 칩과 최근 수정 시각에 쓴다 */
+export function useProjectDocuments(ids: string[]) {
   const ready = useReady();
   return useQueries({
     queries: ids.map((id) => ({ queryKey: keys.documents(id), queryFn: () => mmsApi.listDocuments(id), enabled: ready })),
-    combine: (results) => Object.fromEntries(ids.map((id, i) => [id, results[i].data?.find((d) => d.kind === "REQUIREMENTS")?.status])),
+    combine: (results) => Object.fromEntries(ids.map((id, i) => [id, results[i].data])),
   });
 }
 
