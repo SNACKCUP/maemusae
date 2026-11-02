@@ -14,7 +14,9 @@ const size = (n: number | null) => (n == null ? "" : n < 1024 * 1024 ? `${Math.m
 export function SourcesPanel({ projectId, docId, canManageAll, readOnly }: { projectId: string; docId: number | undefined; canManageAll: boolean; readOnly: boolean }) {
   const { data: sources = [] } = useSources(projectId, docId);
   const remove = useDeleteSource(projectId, docId);
+  // 닫는 동안(사라지는 애니메이션)에도 내용이 그대로 보이도록, 대상은 지우지 않고 열림 여부만 따로 둔다
   const [removing, setRemoving] = useState<ApiSource | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   if (!docId || sources.length === 0) return null;
 
   const title = (s: ApiSource) => s.filename ?? "직접 입력한 내용";
@@ -34,21 +36,24 @@ export function SourcesPanel({ projectId, docId, canManageAll, readOnly }: { pro
               {s.source_type === "FILE" && (
                 <Btn size="sm" onClick={() => downloadSource(projectId, docId, s.id, s.filename ?? "원본").catch((e) => toast.error(apiError(e, "원본을 받지 못했어요.")))}>원본 받기</Btn>
               )}
-              {!readOnly && (s.uploaded_by_me || canManageAll) && <Btn size="sm" variant="ghost" onClick={() => setRemoving(s)}>삭제</Btn>}
+              {!readOnly && (s.uploaded_by_me || canManageAll) && <Btn size="sm" variant="ghost" onClick={() => {
+                setRemoving(s);
+                setConfirmOpen(true);
+              }}>삭제</Btn>}
             </span>
           </li>
         ))}
       </ul>
       <ConfirmDialog
-        open={!!removing}
-        onOpenChange={(v) => !v && setRemoving(null)}
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
         title="올린 문서를 지울까요?"
         body={removing ? `${title(removing)} — 원본 파일과 뽑아 둔 글이 함께 지워져요.` : ""}
         confirmLabel="삭제"
         danger
         onConfirm={() => {
           if (removing) remove.mutate(removing.id, { onSuccess: () => toast.success("지웠어요."), onError: (e) => toast.error(apiError(e)) });
-          setRemoving(null);
+          setConfirmOpen(false);
         }}
       />
     </section>

@@ -36,7 +36,13 @@ function MembersBody({ id, projectName }: { id: string; projectName: string }) {
   const removeMember = useRemoveMember(id);
   const revoke = useRevokeInvitation(id);
   const [inviting, setInviting] = useState(false);
+  // 닫는 동안(사라지는 애니메이션)에도 제목과 내용이 그대로 보이도록, 대상은 지우지 않고 열림 여부만 따로 둔다
   const [removing, setRemoving] = useState<Removing | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const askRemove = (r: Removing) => {
+    setRemoving(r);
+    setConfirmOpen(true);
+  };
 
   const sorted = [...members].sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name, "ko") : a.role === "ADMIN" ? -1 : 1));
   const item = `${card} flex flex-wrap items-center gap-x-5 gap-y-3 p-4`;
@@ -83,7 +89,7 @@ function MembersBody({ id, projectName }: { id: string; projectName: string }) {
                 <option value="ADMIN">관리자</option>
                 <option value="MEMBER">일반</option>
               </NativeSelect>
-              <Btn size="sm" variant="ghost" onClick={() => setRemoving({ kind: "member", item: m })}>내보내기</Btn>
+              <Btn size="sm" variant="ghost" onClick={() => askRemove({ kind: "member", item: m })}>내보내기</Btn>
             </li>
           ))}
         </ul>
@@ -103,7 +109,7 @@ function MembersBody({ id, projectName }: { id: string; projectName: string }) {
                   </p>
                   <p className="mt-1"><Pill tone="yellow" className="px-2 py-0.5 text-[11px]">초대 대기 · {fmtDate(inv.expires_at)}까지</Pill></p>
                 </div>
-                <Btn size="sm" variant="ghost" onClick={() => setRemoving({ kind: "invite", item: inv })}>초대 취소</Btn>
+                <Btn size="sm" variant="ghost" onClick={() => askRemove({ kind: "invite", item: inv })}>초대 취소</Btn>
               </li>
             ))}
           </ul>
@@ -124,8 +130,8 @@ function MembersBody({ id, projectName }: { id: string; projectName: string }) {
         }}
       />
       <ConfirmDialog
-        open={!!removing}
-        onOpenChange={(v) => !v && setRemoving(null)}
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
         title={removing?.kind === "invite" ? "초대를 취소할까요?" : "멤버를 내보낼까요?"}
         body={removing ? (removing.kind === "invite" ? removing.item.email : `${removing.item.name}(${removing.item.user_id})`) : ""}
         confirmLabel={removing?.kind === "invite" ? "초대 취소" : "내보내기"}
@@ -135,7 +141,7 @@ function MembersBody({ id, projectName }: { id: string; projectName: string }) {
           const done = { onSuccess: () => toast.success("처리했어요."), onError: (err: unknown) => toast.error(apiError(err)) };
           if (removing.kind === "invite") revoke.mutate(removing.item.id, done);
           else removeMember.mutate(removing.item.id, done);
-          setRemoving(null);
+          setConfirmOpen(false);
         }}
       />
     </div>
