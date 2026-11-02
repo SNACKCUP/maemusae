@@ -58,7 +58,7 @@ def invite(client, headers, project, mail_outbox):
 
 
 def _token_from(message) -> str:
-    return re.search(r"/maemusae/invite\?token=(\S+)", message.text).group(1)
+    return re.search(r"/invite\?token=(\S+)", message.text).group(1)
 
 
 def _members(client, project_id, hdrs) -> dict[str, dict]:

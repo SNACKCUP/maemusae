@@ -88,7 +88,7 @@ def invite(db: Session, tasks: BackgroundTasks, access: ProjectAccess, email: st
     db.refresh(inv)
 
     inviter = repository.get_user(db, access.principal.user_id)
-    link = f"{settings.frontend_base_url.rstrip('/')}/maemusae/invite?token={raw}"
+    link = f"{settings.frontend_base_url.rstrip('/')}/invite?token={raw}"
     tasks.add_task(
         send_mail,
         email,

@@ -236,3 +236,18 @@
     animation: none !important;
   }
 }
+
+/* 매무새: 통통 튀는 움직임. 움직임 끄기·동작 줄이기에서는 가만히 둔다 */
+@keyframes mms-pop {
+  0% { opacity: 0; transform: translateY(-10px) scale(0.88); }
+  55% { opacity: 1; transform: translateY(3px) scale(1.03); }
+  100% { opacity: 1; transform: none; }
+}
+.mms-pop-in[data-state="open"] {
+  animation: mms-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both !important;
+  transform-origin: top right;
+}
+:root[data-mk-motion="off"] .mms-pop-in { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .mms-pop-in { animation: none !important; }
+}

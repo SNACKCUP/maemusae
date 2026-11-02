@@ -5,23 +5,24 @@ import { MeerkitProvider, meerkitConfig, themeInitScript } from "@/meerkit";
 import "./globals.css";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-const TITLE = "Meerkit — 인증과 유저 관리를 갖춘 AI 서비스 스타터킷";
-const DESCRIPTION = "회원가입, 로그인, 권한, 관리자 화면과 이를 받쳐 주는 백엔드를 명령어 한 줄로 시작하는 스타터킷입니다. Next.js와 FastAPI로 만들었고, 설명서가 함께 있습니다.";
+const TITLE = "매무새 — 모호한 요청을 명확한 정의서로";
+const DESCRIPTION = "고객이 보낸 모호한 요구 문서를 올리면 AI가 요구사항을 가려내고, 팀이 함께 다듬어 확정하면 요구사항정의서로 정리해 주는 서비스입니다.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: TITLE, template: "%s | Meerkit" },
+  title: { default: TITLE, template: "%s | 매무새" },
   description: DESCRIPTION,
-  applicationName: "Meerkit",
-  keywords: ["Meerkit", "미어킷", "스타터킷", "회원가입", "로그인", "인증", "유저 관리", "권한 관리", "Next.js", "FastAPI", "AI 서비스", "create-meerkit"],
-  category: "technology",
+  applicationName: "매무새",
+  keywords: ["매무새", "요구사항정의서", "요구사항 정리", "요구사항 분석", "AI 요구사항", "기능정의서", "SI 프로젝트", "기획 문서"],
+  category: "productivity",
   alternates: { canonical: "/" },
-  openGraph: { type: "website", locale: "ko_KR", siteName: "Meerkit", url: "/", title: TITLE, description: DESCRIPTION },
+  manifest: "/maemusae/manifest.webmanifest",
+  openGraph: { type: "website", locale: "ko_KR", siteName: "매무새", url: "/", title: TITLE, description: DESCRIPTION },
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
   formatDetection: { telephone: false, email: false, address: false },
 };
 
-export const viewport: Viewport = { themeColor: "#F7F3E8" };
+export const viewport: Viewport = { themeColor: "#F6F6F3", colorScheme: "light" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
