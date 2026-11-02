@@ -1,9 +1,7 @@
 // 다크 모드. 저장된 선택("light" | "dark")이 없으면 운영체제 설정을 따른다.
-// 서브 프로젝트(/maemusae)는 자체 색을 쓰므로 항상 밝게 둔다.
+// 이 서비스(매무새)는 자체 색을 쓰므로 항상 밝게 둔다.
 export const THEME_KEY = "meerkit-theme";
 export type Theme = "light" | "dark";
-
-const SUB_PROJECT = /^\/(maemusae)(\/|$)/;
 
 export function storedTheme(): Theme | null {
   try {
@@ -19,9 +17,8 @@ export function systemTheme(): Theme {
 }
 
 /** 지금 화면에 적용할 테마 */
-export function effectiveTheme(pathname: string): Theme {
-  if (SUB_PROJECT.test(pathname)) return "light";
-  return storedTheme() ?? systemTheme();
+export function effectiveTheme(): Theme {
+  return "light";
 }
 
 export function applyTheme(theme: Theme) {
@@ -40,4 +37,4 @@ export function saveTheme(theme: Theme) {
  * 첫 페인트 전에 실행하는 짧은 스크립트(layout의 <head>). 이게 없으면 다크 모드 사용자가
  * 새로고침할 때마다 밝은 화면이 잠깐 보인다. 위 함수들과 같은 규칙을 한 줄로 적었다.
  */
-export const themeInitScript = `(function(){try{var s=localStorage.getItem("${THEME_KEY}");var sub=/^\\/(maemusae)(\\/|$)/.test(location.pathname);var d=!sub&&(s==="dark"||(s!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches));document.documentElement.setAttribute("data-theme",d?"dark":"light")}catch(e){}})()`;
+export const themeInitScript = `(function(){document.documentElement.setAttribute("data-theme","light")})()`;

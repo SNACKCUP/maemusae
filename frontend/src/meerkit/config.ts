@@ -49,7 +49,7 @@ export const meerkitConfig = {
   },
   routes: {
     home: "/",
-    me: "/me",
+    me: "/mypage",
     adminMembers: "/admin/members",
     resetPassword: "/reset-password",
     googleCallback: "/auth/google/callback",

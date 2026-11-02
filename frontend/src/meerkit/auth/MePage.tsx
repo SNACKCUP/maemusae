@@ -20,6 +20,21 @@ import { RequireAuth } from "./guards/RequireAuth";
 import { useAuth } from "./hooks";
 import { useChangePassword, useRemoveAvatar, useSendEmailCode, useUpdateNickname, useUpdateProfile, useUploadAvatar, useVerifyEmailCode, useWithdraw } from "./mutations";
 
+export interface MePageTab {
+  value: string;
+  label: string;
+  content: React.ReactNode;
+}
+
+export interface MePageProps {
+  /** 화면 제목. 기본은 "내 정보" */
+  title?: string;
+  /** 기본 탭(프로필 수정, 비밀번호 변경, 탈퇴) 앞에 끼울 탭. 서비스 고유 설정을 넣는다 */
+  extraTabs?: MePageTab[];
+  /** 이미 <main> 안에 그려질 때 true. 바깥 <main>을 <div>로 바꾼다 */
+  embedded?: boolean;
+}
+
 const date = (iso: string) => iso.slice(0, 10);
 
 // 부품이 보여 줄 수 있게 서버 오류를 문구가 담긴 Error로 바꿔 다시 던진다
@@ -27,7 +42,7 @@ const rethrow = (e: unknown): never => {
   throw new Error(errorMessage(e) ?? "이미지를 처리하지 못했습니다.");
 };
 
-function MeContent() {
+function MeContent({ title = "내 정보", extraTabs = [], embedded = false }: MePageProps) {
   const { user } = useAuth();
   const update = useUpdateProfile();
   const change = useChangePassword();
@@ -41,8 +56,9 @@ function MeContent() {
   if (!user) return null;
   const nicknameOn = meerkitConfig.signup.optionalFields.includes("nickname");
 
+  const Root = embedded ? "div" : "main";
   return (
-    <main className="mk-rise mx-auto max-w-xl px-4 py-12">
+    <Root className="mk-rise mx-auto max-w-xl px-4 py-12">
       <div className="mb-6 flex items-center gap-3">
         <Button
           type="button"
@@ -55,7 +71,7 @@ function MeContent() {
         >
           <ArrowLeft />
         </Button>
-        <h1 className="text-3xl font-semibold tracking-tight">내 정보</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
       </div>
       <Card className="mb-4">
         <CardContent className="grid gap-5">
@@ -83,14 +99,16 @@ function MeContent() {
         )}
       </Card>
 
-      <Tabs defaultValue="profile">
+      <Tabs defaultValue={extraTabs[0]?.value ?? "profile"}>
         <TabsList>
+          {extraTabs.map((x) => <TabsTrigger key={x.value} value={x.value}>{x.label}</TabsTrigger>)}
           <TabsTrigger value="profile">프로필 수정</TabsTrigger>
           <TabsTrigger value="password">비밀번호 변경</TabsTrigger>
           <TabsTrigger value="withdraw">탈퇴</TabsTrigger>
         </TabsList>
         <Card className="mt-3">
           <CardContent>
+            {extraTabs.map((x) => <TabsContent key={x.value} value={x.value} className="mk-swap">{x.content}</TabsContent>)}
             <TabsContent value="profile" className="mk-swap">
               <ProfileForm
                 key={user.updated_at}
@@ -122,14 +140,14 @@ function MeContent() {
           </CardContent>
         </Card>
       </Tabs>
-    </main>
+    </Root>
   );
 }
 
-export function MePage() {
+export function MePage(props: MePageProps) {
   return (
     <RequireAuth>
-      <MeContent />
+      <MeContent {...props} />
     </RequireAuth>
   );
 }

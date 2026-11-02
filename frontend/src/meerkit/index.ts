@@ -1,5 +1,6 @@
 export { MeerkitProvider } from "./providers/MeerkitProvider";
 export { WelcomePage } from "./welcome/WelcomePage";
+export { MePage, type MePageProps, type MePageTab } from "./auth/MePage";
 export { RequireAuth } from "./auth/guards/RequireAuth";
 export { RequireRole } from "./auth/guards/RequireRole";
 export { useAuth } from "./auth/hooks";
