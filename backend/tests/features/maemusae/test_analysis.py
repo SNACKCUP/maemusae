@@ -425,6 +425,64 @@ def test_stage_models_come_from_settings(client, db, owner, docs_url, fake_llm, 
     assert client.get(f"{docs_url}/analysis", headers=owner).json()["status"] == "SUCCEEDED"
 
 
+def test_large_document_uses_large_extract_model(client, db, owner, docs_url, fake_llm, monkeypatch):
+    asked = []
+    monkeypatch.setattr(runner, "get_chat_model", lambda *, model_name=None: asked.append(model_name) or fake_llm)
+    monkeypatch.setattr(mms_settings, "mms_extract_model", "normal-model")
+    monkeypatch.setattr(mms_settings, "mms_extract_model_large", "large-doc-model")
+    monkeypatch.setattr(mms_settings, "mms_large_doc_chars", len(SECRET_TEXT) - 1)  # 이 문서가 "큰 문서"
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [{"requirements": [_req("이메일 회원가입")]}]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert asked == ["large-doc-model"]
+    assert client.get(f"{docs_url}/analysis", headers=owner).json()["status"] == "SUCCEEDED"
+
+
+def test_small_document_keeps_extract_model(client, db, owner, docs_url, fake_llm, monkeypatch):
+    asked = []
+    monkeypatch.setattr(runner, "get_chat_model", lambda *, model_name=None: asked.append(model_name) or fake_llm)
+    monkeypatch.setattr(mms_settings, "mms_extract_model", "normal-model")
+    monkeypatch.setattr(mms_settings, "mms_extract_model_large", "large-doc-model")
+    monkeypatch.setattr(mms_settings, "mms_large_doc_chars", len(SECRET_TEXT))  # 넘지 않음
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [{"requirements": [_req("이메일 회원가입")]}]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert asked == ["normal-model"]
+
+
+def test_fallback_model_after_retries_fail(client, db, owner, docs_url, fake_llm, monkeypatch, caplog):
+    asked = []
+    monkeypatch.setattr(runner, "get_chat_model", lambda *, model_name=None: asked.append(model_name) or fake_llm)
+    monkeypatch.setattr(mms_settings, "mms_fallback_model", "backup-model")
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [LLMTimeoutError("LLM_TIMEOUT", "늦음"), {"requirements": [_req("이메일 회원가입")]}]
+
+    with caplog.at_level(logging.WARNING, logger="app.features.maemusae"):
+        assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert asked == [None, "backup-model"]  # 뽑기 모델(LLM_MODEL), 대체 모델
+    assert len(fake_llm.calls) == 2
+    assert client.get(f"{docs_url}/analysis", headers=owner).json()["status"] == "SUCCEEDED"
+    assert "AI 분석 대체 모델로 시도 step=extract-1 code=LLM_TIMEOUT" in caplog.text
+
+
+def test_fallback_not_used_for_errors_that_will_not_change(client, db, owner, docs_url, fake_llm, monkeypatch):
+    from app.llm.errors import not_configured
+
+    monkeypatch.setattr(mms_settings, "mms_fallback_model", "backup-model")
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [not_configured(), {"requirements": [_req("쓰이지 않음")]}]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert len(fake_llm.calls) == 1
+    assert client.get(f"{docs_url}/analysis", headers=owner).json()["error_code"] == "LLM_NOT_CONFIGURED"
+
+
 # ---- 상세화: 짧게 뽑은 후보를 몇 개씩 자세한 명세로 ----
 
 

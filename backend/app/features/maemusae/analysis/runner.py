@@ -170,9 +170,34 @@ def _stage_model(name: str):
     return get_chat_model(model_name=name.strip() or None)
 
 
-def _retrying[T](call: Callable[[], T], step: str) -> Callable[[threading.Event], T]:
+def _fallback_model():
+    """대체 모델 (MMS_FALLBACK_MODEL). 비우면 None"""
+    name = mms_settings.mms_fallback_model.strip()
+    return get_chat_model(model_name=name) if name else None
+
+
+def _llm_call(prompt, schema, variables: dict, model, fallback_model, step: str):
+    """invoke_structured 한 번을 다시 시도·대체 모델과 함께 묶음 (_call_all 에 넘길 호출)"""
+    fallback = partial(invoke_structured, prompt, schema, variables, model=fallback_model) if fallback_model else None
+    return _retrying(partial(invoke_structured, prompt, schema, variables, model=model), step, fallback)
+
+
+def _extract_model_name(plan: AnalysisPlan, run: AnalysisRun) -> str:
+    """뽑기 모델 이름. 큰 문서(MMS_LARGE_DOC_CHARS 초과)이고 MMS_EXTRACT_MODEL_LARGE 가 있으면 그 모델"""
+    large = mms_settings.mms_extract_model_large.strip()
+    limit = mms_settings.mms_large_doc_chars
+    if large and limit > 0 and plan.doc_chars > limit:
+        logger.info("AI 분석 큰 문서 모델 run_id=%s doc_chars=%s model=%s", run.id, plan.doc_chars, large)
+        return large
+    return mms_settings.mms_extract_model
+
+
+def _retrying[T](
+    call: Callable[[], T], step: str, fallback: Callable[[], T] | None = None
+) -> Callable[[threading.Event], T]:
     """시간 초과·일시 오류면 이 호출만 MMS_BATCH_RETRIES 번까지 잠깐 쉬었다가 다시. 설정 오류·입력 초과는 바로 실패.
 
+    다시 시도까지 끝내 실패하면 fallback(대체 모델, MMS_FALLBACK_MODEL)으로 한 번 더 보냄.
     stop 이 켜지면(다른 호출이 실패해 분석이 끝남) 더 보내지 않고 멈춤 (크레딧 낭비 방지)
     """
 
@@ -184,8 +209,13 @@ def _retrying[T](call: Callable[[], T], step: str) -> Callable[[threading.Event]
             try:
                 return call()
             except AppError as e:
-                if e.code not in RETRYABLE_CODES or attempt >= mms_settings.mms_batch_retries:
+                if e.code not in RETRYABLE_CODES:
                     raise
+                if attempt >= mms_settings.mms_batch_retries:
+                    if fallback is None or stop.is_set():
+                        raise
+                    logger.warning("AI 분석 대체 모델로 시도 step=%s code=%s", step, e.code)
+                    return fallback()
                 delay = RETRY_BACKOFF_SECONDS[min(attempt, len(RETRY_BACKOFF_SECONDS) - 1)]
                 attempt += 1
                 cause = e.__cause__
@@ -243,27 +273,26 @@ def _extract_all(db: Session, run: AnalysisRun, plan: AnalysisPlan, book: Catego
     kinds_text, kinds = _code_text(db, KIND_GROUP)
     priorities_text, priorities = _code_text(db, PRIORITY_GROUP)
     prompt = load_prompt(PROMPTS / "extract.md")
-    model = _stage_model(mms_settings.mms_extract_model)
+    model = _stage_model(_extract_model_name(plan, run))
+    fallback_model = _fallback_model()
     wave = max(1, mms_settings.mms_analyze_concurrency)
     candidates: list[Candidate] = []
     for start in range(0, len(plan.batches), wave):
         batches = plan.batches[start : start + wave]
         categories = book.prompt_text()
         calls = [
-            _retrying(
-                partial(
-                    invoke_structured,
-                    prompt,
-                    ExtractResult,
-                    {
-                        "kinds": kinds_text,
-                        "priorities": priorities_text,
-                        "instructions": run.prompt or NO_INSTRUCTIONS,
-                        "categories": categories,
-                        "document": batch.text,
-                    },
-                    model=model,
-                ),
+            _llm_call(
+                prompt,
+                ExtractResult,
+                {
+                    "kinds": kinds_text,
+                    "priorities": priorities_text,
+                    "instructions": run.prompt or NO_INSTRUCTIONS,
+                    "categories": categories,
+                    "document": batch.text,
+                },
+                model,
+                fallback_model,
                 f"extract-{start + i + 1}",
             )
             for i, batch in enumerate(batches)
@@ -373,6 +402,7 @@ def _expand(db: Session, run: AnalysisRun, candidates: list[Candidate]) -> list[
     priorities_text, priorities = _code_text(db, PRIORITY_GROUP)
     prompt = load_prompt(PROMPTS / "expand.md")
     model = _stage_model(mms_settings.mms_expand_model)
+    fallback_model = _fallback_model()
     starts = list(range(0, len(candidates), EXPAND_CHUNK))
     calls = []
     for start in starts:
@@ -387,7 +417,7 @@ def _expand(db: Session, run: AnalysisRun, candidates: list[Candidate]) -> list[
             "all_names": names,
             "requirements": text,
         }
-        calls.append(_retrying(partial(invoke_structured, prompt, ExpandResult, variables, model=model), f"expand-{start + 1}"))
+        calls.append(_llm_call(prompt, ExpandResult, variables, model, fallback_model, f"expand-{start + 1}"))
     items = []
     for start, result in zip(starts, _call_all(db, run, calls), strict=True):
         end = min(start + EXPAND_CHUNK, len(candidates))
@@ -458,19 +488,18 @@ def _detail(db: Session, run: AnalysisRun, candidates: list[Candidate]) -> list[
     """후보를 DETAIL_CHUNK 개씩 보내 자세한 명세로 바꿈. 답이 없는 후보는 짧은 설명을 그대로 둠"""
     prompt = load_prompt(PROMPTS / "detail.md")
     model = _stage_model(mms_settings.mms_detail_model)
+    fallback_model = _fallback_model()
     starts = list(range(0, len(candidates), DETAIL_CHUNK))
     calls = [
-        _retrying(
-            partial(
-                invoke_structured,
-                prompt,
-                DetailResult,
-                {
-                    "instructions": run.prompt or NO_INSTRUCTIONS,
-                    "requirements": _detail_lines(candidates[start : start + DETAIL_CHUNK], start),
-                },
-                model=model,
-            ),
+        _llm_call(
+            prompt,
+            DetailResult,
+            {
+                "instructions": run.prompt or NO_INSTRUCTIONS,
+                "requirements": _detail_lines(candidates[start : start + DETAIL_CHUNK], start),
+            },
+            model,
+            fallback_model,
             f"detail-{start + 1}",
         )
         for start in starts

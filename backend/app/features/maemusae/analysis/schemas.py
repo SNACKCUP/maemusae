@@ -13,7 +13,7 @@ class ExtractedEvidence(BaseModel):
 
 class ExtractedRequirement(BaseModel):
     name: str = Field(description="짧은 이름 (예: 이메일 회원가입)")
-    description: str = Field(default="", description="무엇을 해야 하는지 한두 문장 (자세한 명세는 상세화 단계에서)")
+    description: str = Field(default="", description="무엇을 해야 하는지 한두 문장")
     kind: str = Field(description="구분 코드")
     priority: str = Field(description="우선순위 코드")
     category_major: str | None = Field(default=None, description="대분류 (업무 영역, 예: 회원 관리). 모르면 null")
