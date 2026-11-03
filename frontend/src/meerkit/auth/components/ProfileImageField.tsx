@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -59,34 +59,40 @@ export function ProfileImageField({ user, onUpload, onRemove, accept = DEFAULT_A
   const shown = { ...user, avatar_url: preview ?? user.avatar_url };
 
   return (
-    <div className="grid justify-items-start gap-2">
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          aria-label="프로필 이미지 변경"
-          disabled={disabled || busy}
-          onClick={() => inputRef.current?.click()}
-          className="group relative rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:opacity-60"
-        >
-          <UserAvatar user={shown} size="xl" />
-          <span className="absolute inset-0 grid place-items-center rounded-full bg-black/45 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-            <Camera className="size-5" aria-hidden />
-          </span>
-        </button>
-        <div className="grid gap-1.5">
-          <Button type="button" variant="outline" size="sm" data-slot="avatar-change" disabled={disabled || busy} onClick={() => inputRef.current?.click()}>
-            {busy ? "올리는 중…" : "이미지 변경"}
-          </Button>
-          {onRemove && user.avatar_url && (
-            <Button type="button" variant="ghost" size="sm" data-slot="avatar-remove" disabled={disabled || busy} onClick={() => onRemove()}>
-              <Trash2 /> 삭제
-            </Button>
-          )}
+    <div className="grid justify-items-center gap-2">
+      <div className="grid justify-items-center gap-2">
+        <div className="relative">
+          <button
+            type="button"
+            aria-label="프로필 이미지 변경"
+            disabled={disabled || busy}
+            onClick={() => inputRef.current?.click()}
+            className="group block rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:opacity-60"
+          >
+            <UserAvatar user={shown} size="xl" />
+          </button>
+          {/* 오른쪽 아래의 펜 아이콘이 이미지 변경 버튼 */}
+          <button
+            type="button"
+            aria-label="프로필 이미지 변경"
+            title="이미지 변경"
+            data-slot="avatar-change"
+            disabled={disabled || busy}
+            onClick={() => inputRef.current?.click()}
+            className="absolute -bottom-0.5 -right-0.5 grid size-7 place-items-center rounded-full border-2 border-card bg-muted text-muted-foreground shadow-sm outline-none transition-[transform,color] duration-200 hover:scale-110 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/30 active:scale-95 disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Pencil className="size-3.5" aria-hidden />}
+          </button>
         </div>
+        {onRemove && user.avatar_url && (
+          <Button type="button" variant="ghost" size="sm" className="h-7 rounded-lg px-2 text-xs" data-slot="avatar-remove" disabled={disabled || busy} onClick={() => onRemove()}>
+            <Trash2 /> 삭제
+          </Button>
+        )}
       </div>
       <input ref={inputRef} type="file" accept={accept.join(",")} className="sr-only" tabIndex={-1} onChange={(e) => pick(e.target.files?.[0])} />
-      {showHint && <p className="text-xs text-muted-foreground">JPG, PNG, WEBP · {maxSizeMB}MB 이하</p>}
-      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+      {showHint && <p className="text-center text-xs text-muted-foreground">JPG, PNG, WEBP · {maxSizeMB}MB 이하</p>}
+      {error && <p role="alert" className="whitespace-pre-line text-center text-xs text-destructive">{error.replace(/\.\s+/g, ".\n")}</p>}
     </div>
   );
 }
