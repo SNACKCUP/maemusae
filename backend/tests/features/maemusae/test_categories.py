@@ -224,4 +224,12 @@ def test_versions_confirm_and_excel_carry_categories(client, owner, docs_url, an
     content = client.get(f"{docs_url}/versions/{confirmed['version_id']}/excel", headers=owner).content
     sheet = load_workbook(io.BytesIO(content)).active
     assert [c.value for c in sheet[10][:4]] == ["REQ-001", "회원 관리", "로그인", "소셜 로그인"]
-    assert [c.value for c in sheet[11][:2]] == ["REQ-002", None]  # 분류 없는 후보는 아래
+    assert [c.value for c in sheet[11][:2]] == ["REQ-002", "-"]  # 분류 없는 후보는 아래, 빈 칸은 '-'
+
+
+def test_null_text_category_is_empty():
+    from app.features.maemusae.analysis.categories import CategoryBook
+
+    book = CategoryBook()
+    assert book.canon(("회원 관리", "null", "None")) == ("회원 관리", None, None)
+    assert book.canon(("NULL", "로그인", "-")) == ("로그인", None, None)  # 빈 칸은 위로 당김

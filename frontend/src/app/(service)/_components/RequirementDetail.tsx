@@ -115,6 +115,10 @@ export function RequirementDetail({
           <OtherNotes notes={others("ANSWER")} />
         </div>
       )}
+      {/* AI가 확인했지만 물을 것이 없었던 후보. 저장값은 비어 있고(확인 필요로 세지 않음) 화면에만 '-'로 표시 */}
+      {!detail.ai_question && !detail.ai_answer && !detail.is_manual && (
+        <p className="rounded-2xl bg-[#ebeae4] px-4 py-3 text-sm text-[#55534c]"><span className="text-xs font-extrabold text-[#6c6a62]">AI의 질문</span> · -</p>
+      )}
       {detail.ai_answer && (
         <p className="rounded-2xl border-[1.5px] border-[#111]/20 px-4 py-3 text-sm"><span className="mb-1 block text-xs font-extrabold text-[#6c6a62]">AI가 정리한 답</span>{detail.ai_answer}</p>
       )}
@@ -156,7 +160,7 @@ function CategoryInputs({ detail, categories, readOnly, onSave }: { detail: ApiR
             disabled={readOnly}
             maxLength={100}
             list={`c-${field}-list`}
-            placeholder="업무 영역"
+            placeholder={readOnly ? "-" : "업무 영역"}
             onChange={(e) => setValues((s) => ({ ...s, [field]: e.target.value }))}
             onBlur={() => save(field)}
             className="h-10 rounded-xl border-[1.5px] border-[#111] bg-white font-normal text-[#111]"

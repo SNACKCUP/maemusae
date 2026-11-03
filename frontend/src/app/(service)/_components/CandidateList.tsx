@@ -73,7 +73,7 @@ export function CandidateList({
                   <span className="text-xs text-[#6c6a62]">{c.code}</span>
                   {c.name}
                 </span>
-                {c.category_major && <span className="truncate text-xs text-[#6c6a62]">{[c.category_major, c.category_middle, c.category_minor].filter(Boolean).join(" > ")}</span>}
+                <span className="truncate text-xs text-[#6c6a62]">{[c.category_major, c.category_middle, c.category_minor].filter(Boolean).join(" > ") || "분류 -"}</span>
                 <span className="flex flex-wrap gap-1.5">
                   <Pill>{kinds.label(c.kind)}</Pill>
                   <Pill>{priorities.label(c.priority)}</Pill>

@@ -11,6 +11,8 @@ from collections.abc import Iterable
 CATEGORY_MAX = 100
 PROMPT_MAX_PATHS = 80  # 지시문에 넣을 기존 분류 수 (너무 길어지지 않게)
 NONE_TEXT = "(없음)"
+# AI 가 빈 분류를 null 대신 글자로 쓰는 경우 (11/3 gpt-4o-mini 에서 대·중·소분류 47칸). 빈 값으로 봄
+EMPTY_WORDS = {"null", "none", "n/a", "-", "없음", "(없음)"}
 
 CategoryPath = tuple[str | None, str | None, str | None]
 
@@ -18,8 +20,10 @@ _SPACES = re.compile(r"\s+")
 
 
 def clean(value: str | None) -> str | None:
-    """앞뒤·겹친 공백 정리, 100자, 빈 값은 None"""
+    """앞뒤·겹친 공백 정리, 100자, 빈 값("null" 같은 글자 포함)은 None"""
     text = _SPACES.sub(" ", value or "").strip()[:CATEGORY_MAX].strip()
+    if text.casefold() in EMPTY_WORDS:
+        return None
     return text or None
 
 

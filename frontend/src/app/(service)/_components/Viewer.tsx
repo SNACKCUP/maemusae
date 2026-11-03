@@ -47,7 +47,7 @@ export const versionRows = (items: ApiVersionItem[], tag?: string): TableRow[] =
 export function downloadCsv(fileName: string, items: TableRow[], kindLabel: (code: string) => string, priorityLabel: (code: string) => string) {
   const rows = [
     ["ID", "대분류", "중분류", "소분류", "이름", "구분", "우선순위", "설명", "근거"],
-    ...items.map((c) => [c.code, c.categoryMajor ?? "", c.categoryMiddle ?? "", c.categoryMinor ?? "", c.name, kindLabel(c.kind), priorityLabel(c.priority), c.description, c.quote]),
+    ...items.map((c) => [c.code, c.categoryMajor || "-", c.categoryMiddle || "-", c.categoryMinor || "-", c.name, kindLabel(c.kind), priorityLabel(c.priority), c.description, c.quote]),
   ];
   const blob = new Blob(["﻿" + rows.map((r) => r.map(esc).join(",")).join("\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);

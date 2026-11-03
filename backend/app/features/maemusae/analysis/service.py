@@ -66,10 +66,13 @@ class AnalysisPlan:
     batches: list[Batch]
     by_tag: dict[str, PageRef]
     dedupe: bool  # 묶음이 여럿일 때만 합치기
+    expand: bool = False  # 숨은 요구사항 보강 (처음 분석만)
+    detail: bool = False  # 후보마다 자세한 명세 쓰기 (처음 분석만)
+    doc_chars: int = 0  # 문서 본문 글자 수 (큰 문서면 뽑기 모델을 바꿈, MMS_LARGE_DOC_CHARS)
 
     @property
     def total_steps(self) -> int:
-        return len(self.batches) + (1 if self.dedupe else 0)
+        return len(self.batches) + (1 if self.dedupe else 0) + (1 if self.expand else 0) + (1 if self.detail else 0)
 
 
 def _page_ref(page, source) -> PageRef:
@@ -94,7 +97,14 @@ def choose_plan(pages: list[PageRef]) -> AnalysisPlan:
     )
     if len(batches) > mms_settings.mms_analyze_max_batches:
         raise DocumentTooLargeToAnalyzeError()
-    return AnalysisPlan(batches, by_tag, dedupe=len(batches) > 1)
+    return AnalysisPlan(
+        batches,
+        by_tag,
+        dedupe=len(batches) > 1,
+        expand=mms_settings.mms_analyze_expand,
+        detail=mms_settings.mms_analyze_detail,
+        doc_chars=sum(len(p.text) for p in pages),
+    )
 
 
 @dataclass(frozen=True)

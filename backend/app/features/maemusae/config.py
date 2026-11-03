@@ -12,10 +12,30 @@ class MaemusaeSettings(BaseSettings):
     mms_page_max_chars: int = 4000  # 쪽 정보가 없는 형식(docx·txt·md·시트)을 글자 수로 나눌 때 한 조각의 크기
 
     # AI 분석 (M3). 묶음 하나가 AI 호출 1번이라 킷 입력 상한(LLM_MAX_INPUT_CHARS, 기본 20,000자) 안이어야 함
-    mms_batch_chars: int = 12_000  # 묶음 하나에 넣는 본문 글자 수. 전체가 이 안이면 AI 1번(작은 문서)
+    # 묶음 하나에 넣는 본문 글자 수. 전체가 이 안이면 AI 1번(작은 문서). 11/3 과업지시서 시험: 12,000자 하나씩 25분 → 6,000자·동시 3개 11분, 품질 같음
+    mms_batch_chars: int = 6_000
     mms_batch_overlap_chars: int = 300  # 묶음이 바뀔 때 앞 쪽 끝을 다음 묶음 앞에 겹쳐 넣는 글자 수
-    mms_analyze_max_batches: int = 40  # 묶음 수 상한. 넘으면 시작 전에 422 DOCUMENT_TOO_LARGE_TO_ANALYZE
+    mms_analyze_max_batches: int = 80  # 묶음 수 상한(6,000자 × 80 = 약 48만 자). 넘으면 시작 전에 422 DOCUMENT_TOO_LARGE_TO_ANALYZE
     mms_analyze_stale_minutes: int = 15  # 진행이 이만큼 없으면 멈춘 분석으로 보고 실패 처리 (서버 재시작 등)
+    # 보강·상세화는 기본 끔: 요구사항정의서는 짧게 뽑는 원본 방식이 큰 문서에서도 안정적이고 싸다 (11/3 시험).
+    # 두 단계(expand.md·detail.md)는 기능정의서(확정된 요구사항 → 상세 명세)에서 다시 쓸 예정
+    # 보강: 뽑은 목록을 AI 에 한 번 더 보내 숨은 요구사항(예: 로그인 → 리프레시 토큰)을 찾음. AI 호출 +1번
+    mms_analyze_expand: bool = False
+    # 상세화: 뽑은 후보를 몇 개씩 보내 개발자가 바로 만들 수 있는 명세(목적·동작·규칙·예외·보안·완료 기준)로 씀
+    mms_analyze_detail: bool = False
+    # 묶음(뽑기)·보강 조각을 동시에 보내는 수. 1이면 하나씩. OpenAI 호출 한도(분당 요청·토큰)를 넘지 않게 정함
+    mms_analyze_concurrency: int = 3
+    # 묶음 하나가 시간 초과·일시 오류로 실패했을 때 그 묶음만 다시 보내는 횟수. 다 실패하면 분석 실패
+    mms_batch_retries: int = 2
+    # 단계별 모델. 비우면 LLM_MODEL. 공급자·키·temperature·시간 제한은 킷 설정(LLM_*)을 같이 씀
+    mms_extract_model: str = ""
+    mms_expand_model: str = ""
+    mms_detail_model: str = ""
+    # 큰 문서는 뽑기 모델을 바꿈: 본문이 MMS_LARGE_DOC_CHARS 자를 넘고 MMS_EXTRACT_MODEL_LARGE 가 있으면 그 모델. 0이면 끔
+    mms_large_doc_chars: int = 0
+    mms_extract_model_large: str = ""
+    # 대체 모델: 다시 시도까지 끝내 실패한(시간 초과·일시 오류) 호출을 이 모델로 한 번 더. 비우면 끔
+    mms_fallback_model: str = ""
 
     # 지운 프로젝트 보관 기간. 지나면 정리 명령(app.features.maemusae.retention)이 원본 파일과 행을 실제로 지움
     mms_project_retention_days: int = 180

@@ -224,6 +224,315 @@ def test_too_large_document_is_rejected_before_starting(client, db, owner, docs_
     assert client.get(docs_url, headers=owner).json()["status"] == "EMPTY"
 
 
+# ---- 보강: 숨은 요구사항 ----
+
+
+def _hidden(source, name, *, kind="NON_FUNCTIONAL", priority="HIGH", question=None):
+    return {
+        "source": source,
+        "name": name,
+        "description": f"{name} 명세",
+        "kind": kind,
+        "priority": priority,
+        "question": question,
+    }
+
+
+def test_expand_adds_hidden_requirements_after_their_source(client, db, owner, docs_url, fake_llm, monkeypatch):
+    monkeypatch.setattr(mms_settings, "mms_analyze_expand", True)
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [
+        {"requirements": [_req("이메일 회원가입"), _req("카드 결제", quote="카드로 한다")]},
+        {
+            "requirements": [
+                _hidden(1, "이메일 인증", kind="FUNCTIONAL", question="인증번호 유효 시간은?"),
+                _hidden(2, "결제 위변조 검증"),
+                _hidden(1, "이메일 회원가입"),  # 이미 있는 이름 → 버림
+                _hidden(9, "없는 번호에서 출발"),  # 없는 번호 → 버림
+                _hidden(1, "비밀번호 암호화 저장", kind="NONE"),
+            ]
+        },
+    ]
+
+    assert _analyze(client, docs_url, owner, prompt="보안을 꼼꼼히").status_code == 202
+
+    assert len(fake_llm.calls) == 2  # 뽑기 1번 + 보강 1번
+    sent = "\n".join(str(m.content) for m in fake_llm.calls[1])
+    assert "[1] 이메일 회원가입 (FUNCTIONAL, HIGH)" in sent and "이메일 회원가입 설명" in sent
+    assert "보안을 꼼꼼히" in sent
+    assert "회원은 이메일로 가입한다" not in sent  # 문서 본문은 보내지 않음
+    progress = client.get(f"{docs_url}/analysis", headers=owner).json()
+    assert (progress["status"], progress["done_steps"], progress["total_steps"]) == ("SUCCEEDED", 2, 2)
+
+    rows = _requirements(db, docs_url)
+    assert [(r.seq, r.name) for r in rows] == [
+        (1, "이메일 회원가입"),
+        (2, "이메일 인증"),
+        (3, "비밀번호 암호화 저장"),
+        (4, "카드 결제"),
+        (5, "결제 위변조 검증"),
+    ]
+    signup, verify, password = rows[0], rows[1], rows[2]
+    assert verify.description == "[숨은 요구사항] '이메일 회원가입' 기능에 필요\n이메일 인증 명세"
+    assert (verify.kind, verify.ai_question) == ("FUNCTIONAL", "인증번호 유효 시간은?")
+    assert (password.kind, password.kind_defaulted) == ("FUNCTIONAL", True)  # 목록에 없는 코드 → 확인 필요
+    # 근거는 출발한 후보의 근거를 그대로 씀
+    assert [(s.quote, s.verified) for s in _sources(db, verify)] == [(s.quote, s.verified) for s in _sources(db, signup)]
+
+
+def test_expand_sends_list_in_chunks(client, db, owner, docs_url, fake_llm, monkeypatch):
+    monkeypatch.setattr(mms_settings, "mms_analyze_expand", True)
+    monkeypatch.setattr(runner, "EXPAND_CHUNK", 1)
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [
+        {"requirements": [_req("이메일 회원가입"), _req("카드 결제", quote="카드로 한다")]},
+        {"requirements": [_hidden(1, "이메일 인증"), _hidden(2, "다른 묶음 번호")]},  # 2 는 이번 묶음 밖 → 버림
+        {"requirements": [_hidden(2, "결제 위변조 검증")]},
+    ]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert len(fake_llm.calls) == 3  # 뽑기 1번 + 보강 2번 (후보 1개씩)
+    second = "\n".join(str(m.content) for m in fake_llm.calls[2])
+    assert "[1] 이메일 회원가입\n[2] 카드 결제" in second  # 전체 이름은 매번 같이 보냄
+    assert "[2] 카드 결제 (FUNCTIONAL, HIGH)" in second and "[1] 이메일 회원가입 (" not in second
+    progress = client.get(f"{docs_url}/analysis", headers=owner).json()
+    assert (progress["done_steps"], progress["total_steps"]) == (2, 2)
+    assert [r.name for r in _requirements(db, docs_url)] == ["이메일 회원가입", "이메일 인증", "카드 결제", "결제 위변조 검증"]
+
+
+def test_expand_failure_fails_run_without_partial_results(client, db, owner, docs_url, fake_llm, monkeypatch):
+    monkeypatch.setattr(mms_settings, "mms_analyze_expand", True)
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [
+        {"requirements": [_req("이메일 회원가입")]},
+        LLMTimeoutError("LLM_TIMEOUT", "AI 응답이 늦어지고 있습니다."),
+    ]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    progress = client.get(f"{docs_url}/analysis", headers=owner).json()
+    assert (progress["status"], progress["error_code"]) == ("FAILED", "LLM_TIMEOUT")
+    assert _requirements(db, docs_url) == []
+
+
+def test_expand_skipped_when_list_is_too_long(client, db, owner, docs_url, fake_llm, monkeypatch):
+    monkeypatch.setattr(mms_settings, "mms_analyze_expand", True)
+    monkeypatch.setattr(runner.llm_settings, "llm_max_input_chars", runner.EXPAND_HEADROOM + 10)
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [{"requirements": [_req("이메일 회원가입")]}]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert len(fake_llm.calls) == 1  # 보강은 건너뜀
+    progress = client.get(f"{docs_url}/analysis", headers=owner).json()
+    assert (progress["status"], progress["done_steps"], progress["total_steps"]) == ("SUCCEEDED", 2, 2)
+    assert [r.name for r in _requirements(db, docs_url)] == ["이메일 회원가입"]
+
+
+# ---- 속도·실패 줄이기: 동시 처리, 실패한 묶음만 다시, 단계별 모델 ----
+
+
+def test_batches_run_concurrently_and_keep_batch_order(client, db, owner, docs_url, fake_llm, monkeypatch):
+    monkeypatch.setattr(mms_settings, "mms_batch_chars", 60)
+    monkeypatch.setattr(mms_settings, "mms_analyze_concurrency", 3)
+    for text in ("가" * 50, "나" * 50, "다" * 50):
+        _add_text(client, docs_url, owner, text)
+    # 동시에 보내면 어느 묶음이 어느 응답을 받을지 정해지지 않으므로, 모두 같은 모양의 응답을 넣고 수·순서만 봄
+    fake_llm.responses = [{"requirements": [_req("후보", quote=None)]} for _ in range(3)] + [{"groups": []}]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert len(fake_llm.calls) == 4  # 묶음 3번(동시) + 합치기 1번
+    progress = client.get(f"{docs_url}/analysis", headers=owner).json()
+    assert (progress["status"], progress["done_steps"], progress["total_steps"]) == ("SUCCEEDED", 4, 4)
+    assert [r.seq for r in _requirements(db, docs_url)] == [1, 2, 3]
+
+
+def test_failed_batch_is_retried_alone(client, db, owner, docs_url, fake_llm, monkeypatch, caplog):
+    monkeypatch.setattr(mms_settings, "mms_batch_retries", 1)
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [
+        LLMTimeoutError("LLM_TIMEOUT", "AI 응답이 늦어지고 있습니다."),
+        {"requirements": [_req("이메일 회원가입")]},
+    ]
+
+    with caplog.at_level(logging.WARNING, logger="app.features.maemusae"):
+        assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert len(fake_llm.calls) == 2
+    assert client.get(f"{docs_url}/analysis", headers=owner).json()["status"] == "SUCCEEDED"
+    assert [r.name for r in _requirements(db, docs_url)] == ["이메일 회원가입"]
+    assert "AI 분석 다시 시도 step=extract-1 attempt=1 code=LLM_TIMEOUT" in caplog.text
+
+
+def test_retry_gives_up_and_skips_errors_that_will_not_change(client, db, owner, docs_url, fake_llm, monkeypatch):
+    from app.llm.errors import not_configured
+
+    monkeypatch.setattr(mms_settings, "mms_batch_retries", 1)
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [not_configured(), {"requirements": [_req("쓰이지 않음")]}]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert len(fake_llm.calls) == 1  # 설정 오류는 다시 보내지 않음
+    progress = client.get(f"{docs_url}/analysis", headers=owner).json()
+    assert (progress["status"], progress["error_code"]) == ("FAILED", "LLM_NOT_CONFIGURED")
+
+
+def test_failure_stops_queued_calls(client, db, owner, docs_url, fake_llm, monkeypatch):
+    from app.llm.errors import LLMRateLimitedError
+
+    monkeypatch.setattr(mms_settings, "mms_batch_chars", 60)
+    for text in ("가" * 50, "나" * 50, "다" * 50, "라" * 50):
+        _add_text(client, docs_url, owner, text)
+    monkeypatch.setattr(mms_settings, "mms_analyze_concurrency", 4)  # 한 차례에 4묶음, 일꾼은 1명이라 줄을 섬
+    real_pool = runner.ThreadPoolExecutor
+    monkeypatch.setattr(runner, "ThreadPoolExecutor", lambda **kw: real_pool(max_workers=1))
+    quota = LLMRateLimitedError("LLM_QUOTA_EXCEEDED", "한도")
+    fake_llm.responses = [quota] + [{"requirements": [_req("후보", quote=None)]} for _ in range(3)]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert client.get(f"{docs_url}/analysis", headers=owner).json()["error_code"] == "LLM_QUOTA_EXCEEDED"
+    assert len(fake_llm.calls) < 4  # 줄 선 호출을 끝까지 돌리지 않음
+
+
+def test_retry_limit_then_fails(client, db, owner, docs_url, fake_llm, monkeypatch):
+    monkeypatch.setattr(mms_settings, "mms_batch_retries", 1)
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [LLMTimeoutError("LLM_TIMEOUT", "늦음"), LLMTimeoutError("LLM_TIMEOUT", "늦음")]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert len(fake_llm.calls) == 2  # 처음 + 다시 1번
+    assert client.get(f"{docs_url}/analysis", headers=owner).json()["error_code"] == "LLM_TIMEOUT"
+    assert _requirements(db, docs_url) == []
+
+
+def test_stage_models_come_from_settings(client, db, owner, docs_url, fake_llm, monkeypatch):
+    asked = []
+    monkeypatch.setattr(runner, "get_chat_model", lambda *, model_name=None: asked.append(model_name) or fake_llm)
+    monkeypatch.setattr(mms_settings, "mms_analyze_expand", True)
+    monkeypatch.setattr(mms_settings, "mms_extract_model", "fast-model")
+    monkeypatch.setattr(mms_settings, "mms_expand_model", " ")  # 비우면 LLM_MODEL (None)
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [{"requirements": [_req("이메일 회원가입")]}, {"requirements": []}]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert asked == ["fast-model", None]  # 뽑기, 보강
+    assert client.get(f"{docs_url}/analysis", headers=owner).json()["status"] == "SUCCEEDED"
+
+
+def test_large_document_uses_large_extract_model(client, db, owner, docs_url, fake_llm, monkeypatch):
+    asked = []
+    monkeypatch.setattr(runner, "get_chat_model", lambda *, model_name=None: asked.append(model_name) or fake_llm)
+    monkeypatch.setattr(mms_settings, "mms_extract_model", "normal-model")
+    monkeypatch.setattr(mms_settings, "mms_extract_model_large", "large-doc-model")
+    monkeypatch.setattr(mms_settings, "mms_large_doc_chars", len(SECRET_TEXT) - 1)  # 이 문서가 "큰 문서"
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [{"requirements": [_req("이메일 회원가입")]}]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert asked == ["large-doc-model"]
+    assert client.get(f"{docs_url}/analysis", headers=owner).json()["status"] == "SUCCEEDED"
+
+
+def test_small_document_keeps_extract_model(client, db, owner, docs_url, fake_llm, monkeypatch):
+    asked = []
+    monkeypatch.setattr(runner, "get_chat_model", lambda *, model_name=None: asked.append(model_name) or fake_llm)
+    monkeypatch.setattr(mms_settings, "mms_extract_model", "normal-model")
+    monkeypatch.setattr(mms_settings, "mms_extract_model_large", "large-doc-model")
+    monkeypatch.setattr(mms_settings, "mms_large_doc_chars", len(SECRET_TEXT))  # 넘지 않음
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [{"requirements": [_req("이메일 회원가입")]}]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert asked == ["normal-model"]
+
+
+def test_fallback_model_after_retries_fail(client, db, owner, docs_url, fake_llm, monkeypatch, caplog):
+    asked = []
+    monkeypatch.setattr(runner, "get_chat_model", lambda *, model_name=None: asked.append(model_name) or fake_llm)
+    monkeypatch.setattr(mms_settings, "mms_fallback_model", "backup-model")
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [LLMTimeoutError("LLM_TIMEOUT", "늦음"), {"requirements": [_req("이메일 회원가입")]}]
+
+    with caplog.at_level(logging.WARNING, logger="app.features.maemusae"):
+        assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert asked == [None, "backup-model"]  # 뽑기 모델(LLM_MODEL), 대체 모델
+    assert len(fake_llm.calls) == 2
+    assert client.get(f"{docs_url}/analysis", headers=owner).json()["status"] == "SUCCEEDED"
+    assert "AI 분석 대체 모델로 시도 step=extract-1 code=LLM_TIMEOUT" in caplog.text
+
+
+def test_fallback_not_used_for_errors_that_will_not_change(client, db, owner, docs_url, fake_llm, monkeypatch):
+    from app.llm.errors import not_configured
+
+    monkeypatch.setattr(mms_settings, "mms_fallback_model", "backup-model")
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [not_configured(), {"requirements": [_req("쓰이지 않음")]}]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert len(fake_llm.calls) == 1
+    assert client.get(f"{docs_url}/analysis", headers=owner).json()["error_code"] == "LLM_NOT_CONFIGURED"
+
+
+# ---- 상세화: 짧게 뽑은 후보를 몇 개씩 자세한 명세로 ----
+
+
+def test_detail_writes_specs_in_chunks_and_keeps_hidden_mark(client, db, owner, docs_url, fake_llm, monkeypatch):
+    monkeypatch.setattr(mms_settings, "mms_analyze_expand", True)
+    monkeypatch.setattr(mms_settings, "mms_analyze_detail", True)
+    monkeypatch.setattr(runner, "DETAIL_CHUNK", 2)
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [
+        {"requirements": [_req("이메일 회원가입", question="소셜 가입도?"), _req("카드 결제", quote="카드로 한다")]},
+        {"requirements": [_hidden(1, "이메일 인증")]},
+        # 후보 3개(회원가입, 이메일 인증, 카드 결제)를 2개·1개로 나눠 보냄
+        {
+            "items": [
+                {"ref": 1, "description": "목적: 가입\n상세 동작:\n- 이메일 입력", "question": "새 질문"},
+                {"ref": 2, "description": "목적: 인증\n완료 기준: 인증번호 확인", "question": "유효 시간은?"},
+                {"ref": 3, "description": "다른 조각 번호 → 버림"},
+            ]
+        },
+        {"items": [{"ref": 3, "description": "   "}]},  # 빈 답 → 짧은 설명 유지
+    ]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert len(fake_llm.calls) == 4  # 뽑기 + 보강 + 상세화 2번
+    first_chunk = "\n".join(str(m.content) for m in fake_llm.calls[2])
+    assert "[1] 이메일 회원가입 (FUNCTIONAL, HIGH)" in first_chunk and "근거: \"이메일로 가입한다\"" in first_chunk
+    assert "이미 있는 질문: 소셜 가입도?" in first_chunk
+    assert "[숨은 요구사항]" not in first_chunk  # 표시는 서버가 지킴
+    progress = client.get(f"{docs_url}/analysis", headers=owner).json()
+    assert (progress["status"], progress["done_steps"], progress["total_steps"]) == ("SUCCEEDED", 3, 3)
+
+    signup, verify, card = _requirements(db, docs_url)
+    assert (signup.description, signup.ai_question) == ("목적: 가입\n상세 동작:\n- 이메일 입력", "소셜 가입도?")  # 있던 질문 유지
+    assert verify.description == "[숨은 요구사항] '이메일 회원가입' 기능에 필요\n목적: 인증\n완료 기준: 인증번호 확인"
+    assert verify.ai_question == "유효 시간은?"
+    assert card.description == "카드 결제 설명"
+
+
+def test_detail_failure_fails_run(client, db, owner, docs_url, fake_llm, monkeypatch):
+    monkeypatch.setattr(mms_settings, "mms_analyze_detail", True)
+    _add_text(client, docs_url, owner)
+    fake_llm.responses = [{"requirements": [_req("이메일 회원가입")]}, LLMTimeoutError("LLM_TIMEOUT", "늦음")]
+
+    assert _analyze(client, docs_url, owner).status_code == 202
+
+    assert client.get(f"{docs_url}/analysis", headers=owner).json()["error_code"] == "LLM_TIMEOUT"
+    assert _requirements(db, docs_url) == []
+
+
 # ---- 실패 ----
 
 
@@ -395,3 +704,15 @@ def test_logs_have_no_document_text_or_prompt(client, owner, docs_url, fake_llm,
     assert "AI 분석 끝" in caplog.text
     for secret in ("이메일로 가입한다", "비밀 후보 이름", "비밀 지시문"):
         assert secret not in caplog.text
+
+
+def test_retry_stops_when_analysis_already_failed():
+    import threading
+
+    sent = []
+    run = runner._retrying(lambda: sent.append(1), "detail-1")
+    stop = threading.Event()
+    stop.set()  # 다른 호출이 실패해 분석이 끝난 뒤
+    with pytest.raises(runner.AnalysisCancelledError):
+        run(stop)
+    assert sent == []  # 더 보내지 않음
