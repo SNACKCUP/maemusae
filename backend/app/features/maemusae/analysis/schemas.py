@@ -13,7 +13,7 @@ class ExtractedEvidence(BaseModel):
 
 class ExtractedRequirement(BaseModel):
     name: str = Field(description="짧은 이름 (예: 이메일 회원가입)")
-    description: str = Field(default="", description="무엇을 해야 하는지 한두 문장")
+    description: str = Field(default="", description="무엇을 해야 하는지 한두 문장 (자세한 명세는 상세화 단계에서)")
     kind: str = Field(description="구분 코드")
     priority: str = Field(description="우선순위 코드")
     category_major: str | None = Field(default=None, description="대분류 (업무 영역, 예: 회원 관리). 모르면 null")
@@ -27,10 +27,33 @@ class ExtractResult(BaseModel):
     requirements: list[ExtractedRequirement] = Field(default_factory=list)
 
 
+class ExpandedRequirement(BaseModel):
+    source: int = Field(description="출발한 요구사항 번호. 목록 앞 [3] 의 3")
+    name: str = Field(description="짧은 이름 (예: 리프레시 토큰 재발급)")
+    description: str = Field(default="", description="무엇을 해야 하고 왜 필요한지 한두 문장 (자세한 명세는 상세화 단계에서)")
+    kind: str = Field(description="구분 코드")
+    priority: str = Field(description="우선순위 코드")
+    question: str | None = Field(default=None, description="고객이 정해야 할 값이 있으면 물을 질문 한 문장, 아니면 null")
+
+
+class ExpandResult(BaseModel):
+    requirements: list[ExpandedRequirement] = Field(default_factory=list, description="숨은 요구사항만. 없으면 빈 목록")
+
+
+class DetailedRequirement(BaseModel):
+    ref: int = Field(description="후보 번호. 후보 앞 [3] 의 3")
+    description: str = Field(description="개발자가 바로 만들 수 있는 명세. 목적, 상세 동작, 입력·규칙, 예외·오류, 권한·보안, 완료 기준 중 해당 항목을 줄을 바꿔 씀")
+    question: str | None = Field(default=None, description="고객이 꼭 정해야 할 값이 있으면 질문 한 문장. 후보에 이미 질문이 있거나 없으면 null")
+
+
+class DetailResult(BaseModel):
+    items: list[DetailedRequirement] = Field(default_factory=list, description="받은 후보마다 하나씩")
+
+
 class RefinedRequirement(BaseModel):
     ref: str = Field(description="후보 번호표. [R1 · REQ-002 …] 의 R1")
     name: str | None = Field(default=None, description="바꿀 이름. 그대로면 null")
-    description: str | None = Field(default=None, description="바꿀 설명. 그대로면 null")
+    description: str | None = Field(default=None, description="바꿀 설명 전체 (기존 명세 항목 모양 유지). 그대로면 null")
     kind: str | None = Field(default=None, description="바꿀 구분 코드. 그대로면 null")
     priority: str | None = Field(default=None, description="바꿀 우선순위 코드. 그대로면 null")
     category_major: str | None = Field(default=None, description="분류가 (없음)인 후보에만: 대분류. 아니면 null")

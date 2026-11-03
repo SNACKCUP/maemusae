@@ -38,6 +38,7 @@ COLUMNS = [  # (머리줄, 너비)
 ]
 TABLE_HEADER_ROW = 9
 GAP_NOTE = "빠진 번호는 체크를 해제했거나 지운 후보예요."
+EMPTY_MARK = "-"  # 분류를 확인했지만 적을 내용이 없는 칸 (정렬·병합은 빈 값 기준 그대로)
 
 _THIN = Side(style="thin", color="999999")
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
@@ -140,9 +141,9 @@ def build_requirements_xlsx(
     for offset, item in enumerate(rows):
         values = [
             item["code"],
-            _category(item, "major"),
-            _category(item, "middle"),
-            _category(item, "minor"),
+            _category(item, "major") or EMPTY_MARK,
+            _category(item, "middle") or EMPTY_MARK,
+            _category(item, "minor") or EMPTY_MARK,
             item["name"],
             kind_label(item["kind"]),
             priority_label(item["priority"]),

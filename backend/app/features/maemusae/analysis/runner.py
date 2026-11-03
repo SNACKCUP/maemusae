@@ -2,6 +2,11 @@
 
 1. 묶음마다 prompts/extract.md 로 후보를 뽑고 done_steps +1 (commit 해서 화면 진행률·멈춤 판단에 씀)
 2. 묶음이 여럿이면 prompts/dedupe.md 로 같은 후보를 묶어 하나로 (근거는 모두 남김)
+   MMS_ANALYZE_EXPAND 가 켜져 있으면 prompts/expand.md 로 후보 EXPAND_CHUNK 개씩 숨은 요구사항(예: 로그인 → 리프레시 토큰)을 찾아
+   출발한 후보 바로 뒤에 넣음. 근거는 출발한 후보의 근거를 그대로 씀 (AI 가 근거를 지어내지 않게)
+   MMS_ANALYZE_DETAIL 이 켜져 있으면 prompts/detail.md 로 후보 DETAIL_CHUNK 개씩 자세한 명세를 씀.
+   뽑기는 짧게 하고 명세는 따로 쓰는 이유: 한 번에 쓰는 답이 길면 큰 묶음에서 시간 초과가 남 (11/3 과업지시서 시험)
+   여러 AI 호출은 MMS_ANALYZE_CONCURRENCY 개까지 동시에, 실패한 호출만 MMS_BATCH_RETRIES 번 다시 보냄
 3. 근거 문장을 서버가 쪽 본문에서 찾아 verified·끝 쪽을 정함. 없는 쪽 번호를 댄 근거는 버림
 4. 문서를 잠그고, 분석 요청이 아직 RUNNING 일 때만 한 트랜잭션으로 저장 (멈춤 정리와 겹치면 저장하지 않음).
    저장할 때 이전 후보·직접 추가·입력을 모두 지우고 REQ-001 부터 다시 매깁니다. 버전 번호는 건드리지 않고
@@ -12,12 +17,16 @@
 로그에는 id·묶음 수·후보 수·걸린 시간·오류 코드만. 문서 본문·후보 내용·지시문은 남기지 않습니다.
 """
 
+import contextvars
 import logging
+import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -37,6 +46,8 @@ from app.features.maemusae.analysis.models import (
 )
 from app.features.maemusae.analysis.schemas import (
     DedupeResult,
+    DetailResult,
+    ExpandResult,
     ExtractedRequirement,
     ExtractResult,
     RefinedRequirement,
@@ -51,8 +62,9 @@ from app.features.maemusae.analysis.service import (
     load_pages,
     refine_plan,
 )
+from app.features.maemusae.config import mms_settings
 from app.features.maemusae.documents.models import READY
-from app.llm import invoke_structured, load_prompt
+from app.llm import get_chat_model, invoke_structured, load_prompt
 from app.llm.config import llm_settings
 
 logger = logging.getLogger(__name__)
@@ -68,6 +80,19 @@ NAME_MAX = 200
 QUOTE_MAX = 1000
 DEDUPE_DESCRIPTION_CHARS = 80
 DEDUPE_HEADROOM = 2000  # 합치기 프롬프트 지시문 몫으로 킷 입력 상한에서 빼 두는 글자 수
+EXPAND_DESCRIPTION_CHARS = 300  # 보강에 보내는 설명 길이. 넘치면 이름만
+EXPAND_CHUNK = 15  # 보강 AI 호출 1번에 볼 후보 수
+EXPAND_HEADROOM = 4000  # 보강 프롬프트 지시문 몫
+EXPAND_PER_SOURCE = 5  # 후보 하나에서 받는 숨은 요구사항 수 상한 (프롬프트와 같은 값)
+HIDDEN_MARK = "[숨은 요구사항]"
+DETAIL_CHUNK = 8  # 상세화 AI 호출 1번에 쓰는 후보 수. 답(명세) 길이가 이 수에 비례해 시간 초과를 막음
+DETAIL_DESCRIPTION_CHARS = 600
+DETAIL_QUOTE_CHARS = 300
+NO_QUESTION = {"", "null", "none", "없음", "(없음)"}
+# 다시 보내 볼 만한 오류 (킷 LLM 오류 코드). 설정 없음·입력 초과·키 오류는 다시 보내도 같으므로 제외
+RETRYABLE_CODES = {"LLM_TIMEOUT", "LLM_RATE_LIMITED", "LLM_PROVIDER_ERROR", "LLM_BAD_OUTPUT"}
+HEARTBEAT_SECONDS = 60
+RETRY_BACKOFF_SECONDS = (5, 20)  # 다시 시도 전에 쉬는 시간 (일시 오류는 곧바로 다시 보내면 또 실패하기 쉬움)
 
 
 @contextmanager
@@ -114,6 +139,10 @@ def _run(db: Session, run_id: int) -> None:
         candidates = _extract_all(db, run, plan, CategoryBook())  # 다시 분석은 기존 후보를 지우므로 빈 목록에서
         if plan.dedupe and len(candidates) > 1:
             candidates = _dedupe(candidates)
+        if plan.expand and candidates:
+            candidates = _expand(db, run, candidates)
+        if plan.detail and candidates:
+            candidates = _detail(db, run, candidates)
         count = _save(db, run_id, document_id, candidates, plan.by_tag)
     except Exception as e:  # noqa: BLE001 — 어느 단계 오류든 run 을 FAILED 로 남겨야 화면이 멈추지 않음
         db.rollback()
@@ -136,31 +165,123 @@ def _code_text(db: Session, group: str) -> tuple[str, list[str]]:
     return ", ".join(f"{c.code}({c.label})" for c in codes), [c.code for c in codes]
 
 
+def _stage_model(name: str):
+    """단계별 모델 (MMS_EXTRACT_MODEL 등). 비우면 LLM_MODEL. 랭체인은 킷(app.llm)만 직접 다룸"""
+    return get_chat_model(model_name=name.strip() or None)
+
+
+def _retrying[T](call: Callable[[], T], step: str) -> Callable[[threading.Event], T]:
+    """시간 초과·일시 오류면 이 호출만 MMS_BATCH_RETRIES 번까지 잠깐 쉬었다가 다시. 설정 오류·입력 초과는 바로 실패.
+
+    stop 이 켜지면(다른 호출이 실패해 분석이 끝남) 더 보내지 않고 멈춤 (크레딧 낭비 방지)
+    """
+
+    def run(stop: threading.Event) -> T:
+        attempt = 0
+        while True:
+            if stop.is_set():
+                raise AnalysisCancelledError()
+            try:
+                return call()
+            except AppError as e:
+                if e.code not in RETRYABLE_CODES or attempt >= mms_settings.mms_batch_retries:
+                    raise
+                delay = RETRY_BACKOFF_SECONDS[min(attempt, len(RETRY_BACKOFF_SECONDS) - 1)]
+                attempt += 1
+                cause = e.__cause__
+                logger.warning(
+                    "AI 분석 다시 시도 step=%s attempt=%s code=%s cause=%s status=%s wait=%ss",
+                    step, attempt, e.code, type(cause).__name__ if cause else "-",
+                    getattr(cause, "status_code", "-"), delay,
+                )
+                if stop.wait(delay):  # 쉬는 동안 분석이 끝나면 바로 멈춤
+                    raise AnalysisCancelledError() from e
+
+    return run
+
+
+class AnalysisCancelledError(Exception):
+    """다른 호출이 실패해 남은 호출을 멈춤 (밖으로는 처음 실패한 오류가 나감)"""
+
+
+def _touch(db: Session, run: AnalysisRun) -> None:
+    run.updated_at = datetime.now(UTC)
+    db.commit()  # 오래 걸리는 호출을 기다리는 동안에도 멈춘 분석으로 보지 않게
+
+
+def _call_all[T](db: Session, run: AnalysisRun, calls: list[Callable[[threading.Event], T]]) -> list[T]:
+    """AI 호출을 MMS_ANALYZE_CONCURRENCY 개까지 동시에 보내고 결과를 calls 순서로 돌려줌.
+
+    DB 는 이 함수(요청 스레드)에서만 씀. 기다리는 동안 HEARTBEAT_SECONDS 마다 진행 시각을 갱신.
+    하나라도 실패하면 아직 시작하지 않은 호출은 취소하고 그 오류를 그대로 던짐.
+    """
+    workers = max(1, min(mms_settings.mms_analyze_concurrency, len(calls)))
+    pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="mms-analysis")
+    stop = threading.Event()
+    try:
+        futures = [pool.submit(contextvars.copy_context().run, call, stop) for call in calls]  # 로그의 요청 id 유지
+        pending = set(futures)
+        while pending:
+            done, pending = wait(pending, timeout=HEARTBEAT_SECONDS, return_when=FIRST_EXCEPTION)
+            failed = next((f for f in futures if f in done and f.exception()), None)
+            if failed:
+                # 남은 호출을 기다리지 않고 바로 던짐 (기다리면 줄 선 호출이 모두 실행돼 한도만 더 씀)
+                raise failed.exception()
+            if pending:
+                _touch(db, run)
+        return [f.result() for f in futures]
+    finally:
+        stop.set()  # 아직 도는 호출은 다시 시도하지 않고 멈춤
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
 def _extract_all(db: Session, run: AnalysisRun, plan: AnalysisPlan, book: CategoryBook) -> list[Candidate]:
-    """묶음마다 후보 뽑기. 앞 묶음에서 쓴 분류 이름을 다음 묶음에 같이 보내고, 같은 이름은 book 이 한 표기로 맞춤"""
+    """묶음마다 후보 뽑기. MMS_ANALYZE_CONCURRENCY 개씩 한 차례로 동시에 보냄.
+
+    앞 차례에서 쓴 분류 이름을 다음 차례에 같이 보내고, 같은 이름은 book 이 한 표기로 맞춤 (결과는 묶음 순서대로 처리).
+    """
     kinds_text, kinds = _code_text(db, KIND_GROUP)
     priorities_text, priorities = _code_text(db, PRIORITY_GROUP)
     prompt = load_prompt(PROMPTS / "extract.md")
+    model = _stage_model(mms_settings.mms_extract_model)
+    wave = max(1, mms_settings.mms_analyze_concurrency)
     candidates: list[Candidate] = []
-    for batch in plan.batches:
-        result = invoke_structured(
-            prompt,
-            ExtractResult,
-            {
-                "kinds": kinds_text,
-                "priorities": priorities_text,
-                "instructions": run.prompt or NO_INSTRUCTIONS,
-                "categories": book.prompt_text(),
-                "document": batch.text,
-            },
-        )
-        for item in result.requirements:
-            if c := _candidate(item, set(batch.tags), kinds, priorities):
-                c.category = book.canon((item.category_major, item.category_middle, item.category_minor))
-                candidates.append(c)
-        run.done_steps += 1
+    for start in range(0, len(plan.batches), wave):
+        batches = plan.batches[start : start + wave]
+        categories = book.prompt_text()
+        calls = [
+            _retrying(
+                partial(
+                    invoke_structured,
+                    prompt,
+                    ExtractResult,
+                    {
+                        "kinds": kinds_text,
+                        "priorities": priorities_text,
+                        "instructions": run.prompt or NO_INSTRUCTIONS,
+                        "categories": categories,
+                        "document": batch.text,
+                    },
+                    model=model,
+                ),
+                f"extract-{start + i + 1}",
+            )
+            for i, batch in enumerate(batches)
+        ]
+        for batch, result in zip(batches, _call_all(db, run, calls), strict=True):
+            for item in result.requirements:
+                if c := _candidate(item, set(batch.tags), kinds, priorities):
+                    c.category = book.canon((item.category_major, item.category_middle, item.category_minor))
+                    candidates.append(c)
+            run.done_steps += 1
         db.commit()  # 진행률. updated_at 이 바뀌어 멈춘 분석으로 보지 않음
     return candidates
+
+
+def _question(value: str | None) -> str | None:
+    """AI 가 질문 칸에 "null"·"없음"을 글자로 쓰는 일이 있어 빈 값으로 봄"""
+    value = (value or "").strip()
+    return None if value.lower() in NO_QUESTION else value
 
 
 def _tag(value: str) -> str:
@@ -183,7 +304,7 @@ def _candidate(item: ExtractedRequirement, tags: set[str], kinds: list[str], pri
         tag, quote = _tag(ev.page), ev.quote.strip()[:QUOTE_MAX]
         if tag in tags and quote and (tag, quote) not in evidence:  # 이 묶음에 없는 쪽 번호는 버림
             evidence.append((tag, quote))
-    question = (item.question or "").strip() or None
+    question = _question(item.question)
     return Candidate(
         name, item.description.strip(), kind, priority, question, evidence, kind_defaulted, priority_defaulted
     )
@@ -221,6 +342,159 @@ def _dedupe(candidates: list[Candidate]) -> list[Candidate]:
         keep.question = keep.question or other.question
         keep.category = keep.category if keep.category[0] else other.category
     return kept
+
+
+def _expand_lines(candidates: list[Candidate], start: int, with_description: bool) -> str:
+    lines = []
+    for i, c in enumerate(candidates, start + 1):
+        category = " > ".join(p for p in c.category if p)
+        head = f"[{i}] {c.name} ({c.kind}, {c.priority}" + (f", {category}" if category else "") + ")"
+        desc = " ".join(c.description.split())[:EXPAND_DESCRIPTION_CHARS] if with_description else ""
+        lines.append(head + (f"\n    {desc}" if desc else ""))
+    return "\n".join(lines)
+
+
+def _name_key(name: str) -> str:
+    return "".join(name.split()).lower()
+
+
+def _expand(db: Session, run: AnalysisRun, candidates: list[Candidate]) -> list[Candidate]:
+    """뽑은 목록을 EXPAND_CHUNK 개씩 보내 숨은 요구사항을 받아 출발한 후보 바로 뒤에 넣음.
+
+    한 번에 다 보내면 AI 가 앞쪽 몇 개만 보고 마는 일이 많아 나눠 보냄. 겹치지 않게 전체 이름 목록도 같이 보냄.
+    너무 길면(이름 목록만으로 상한을 넘으면) 보강을 건너뜀.
+    """
+    budget = llm_settings.llm_max_input_chars - EXPAND_HEADROOM
+    names = "\n".join(f"[{i}] {c.name}" for i, c in enumerate(candidates, 1))
+    if len(names) > budget:
+        logger.info("AI 분석 보강 건너뜀 candidates=%s", len(candidates))
+        return _step_done(db, run, candidates)
+    kinds_text, kinds = _code_text(db, KIND_GROUP)
+    priorities_text, priorities = _code_text(db, PRIORITY_GROUP)
+    prompt = load_prompt(PROMPTS / "expand.md")
+    model = _stage_model(mms_settings.mms_expand_model)
+    starts = list(range(0, len(candidates), EXPAND_CHUNK))
+    calls = []
+    for start in starts:
+        chunk = candidates[start : start + EXPAND_CHUNK]
+        text = _expand_lines(chunk, start, with_description=True)
+        if len(names) + len(text) > budget:
+            text = _expand_lines(chunk, start, with_description=False)
+        variables = {
+            "kinds": kinds_text,
+            "priorities": priorities_text,
+            "instructions": run.prompt or NO_INSTRUCTIONS,
+            "all_names": names,
+            "requirements": text,
+        }
+        calls.append(_retrying(partial(invoke_structured, prompt, ExpandResult, variables, model=model), f"expand-{start + 1}"))
+    items = []
+    for start, result in zip(starts, _call_all(db, run, calls), strict=True):
+        end = min(start + EXPAND_CHUNK, len(candidates))
+        # 이번 조각 밖의 번호에서 출발한 것은 버림 (그 후보는 자기 조각에서 봄)
+        items += [item for item in result.requirements if start < item.source <= end]
+
+    seen = {_name_key(c.name) for c in candidates}
+    added: dict[int, list[Candidate]] = {}  # 출발한 후보 번호(0부터) → 숨은 요구사항
+    fallback = DEFAULT_PRIORITY if DEFAULT_PRIORITY in priorities else priorities[0]
+    for item in items:
+        name = item.name.strip()[:NAME_MAX]
+        index = item.source - 1
+        if not name or _name_key(name) in seen:
+            continue  # 이미 있는 이름은 버림
+        if len(added.setdefault(index, [])) >= EXPAND_PER_SOURCE:
+            continue
+        seen.add(_name_key(name))
+        parent = candidates[index]
+        description = item.description.strip()
+        if not description.startswith(HIDDEN_MARK):
+            description = f"{HIDDEN_MARK} '{parent.name}' 기능에 필요\n{description}".rstrip()
+        kind_defaulted = item.kind not in kinds
+        priority_defaulted = item.priority not in priorities
+        added[index].append(
+            Candidate(
+                name,
+                description,
+                kinds[0] if kind_defaulted else item.kind,
+                fallback if priority_defaulted else item.priority,
+                _question(item.question),
+                list(parent.evidence),  # 출발한 후보의 근거 (AI 가 지어낸 근거는 받지 않음)
+                kind_defaulted,
+                priority_defaulted,
+                parent.category,
+            )
+        )
+    expanded = []
+    for i, c in enumerate(candidates):
+        expanded.append(c)
+        expanded += added.get(i, [])
+    logger.info("AI 분석 보강 run_id=%s added=%s", run.id, len(expanded) - len(candidates))
+    return _step_done(db, run, expanded)
+
+
+def _detail_lines(candidates: list[Candidate], start: int) -> str:
+    lines = []
+    for i, c in enumerate(candidates, start + 1):
+        category = " > ".join(p for p in c.category if p)
+        lines.append(f"[{i}] {c.name} ({c.kind}, {c.priority}" + (f", {category}" if category else "") + ")")
+        body = _hidden_split(c.description)[1]
+        lines.append(f"    설명: {' '.join(body.split())[:DETAIL_DESCRIPTION_CHARS] or '(없음)'}")
+        for _, quote in c.evidence[:2]:
+            lines.append(f"    근거: \"{' '.join(quote.split())[:DETAIL_QUOTE_CHARS]}\"")
+        if c.question:
+            lines.append(f"    이미 있는 질문: {c.question}")
+    return "\n".join(lines)
+
+
+def _hidden_split(description: str) -> tuple[str | None, str]:
+    """숨은 요구사항 첫 줄 표시와 나머지. 표시는 서버가 지켜서 AI 가 지우지 못하게 함"""
+    if description.startswith(HIDDEN_MARK):
+        head, _, rest = description.partition("\n")
+        return head, rest.strip()
+    return None, description
+
+
+def _detail(db: Session, run: AnalysisRun, candidates: list[Candidate]) -> list[Candidate]:
+    """후보를 DETAIL_CHUNK 개씩 보내 자세한 명세로 바꿈. 답이 없는 후보는 짧은 설명을 그대로 둠"""
+    prompt = load_prompt(PROMPTS / "detail.md")
+    model = _stage_model(mms_settings.mms_detail_model)
+    starts = list(range(0, len(candidates), DETAIL_CHUNK))
+    calls = [
+        _retrying(
+            partial(
+                invoke_structured,
+                prompt,
+                DetailResult,
+                {
+                    "instructions": run.prompt or NO_INSTRUCTIONS,
+                    "requirements": _detail_lines(candidates[start : start + DETAIL_CHUNK], start),
+                },
+                model=model,
+            ),
+            f"detail-{start + 1}",
+        )
+        for start in starts
+    ]
+    detailed = 0
+    for start, result in zip(starts, _call_all(db, run, calls), strict=True):
+        end = min(start + DETAIL_CHUNK, len(candidates))
+        for item in result.items:
+            body = item.description.strip()
+            if not start < item.ref <= end or not body:
+                continue  # 이번 조각 밖 번호·빈 답은 버림
+            c = candidates[item.ref - 1]
+            head, _ = _hidden_split(c.description)
+            c.description = f"{head}\n{body}" if head else body
+            c.question = c.question or _question(item.question)
+            detailed += 1
+    logger.info("AI 분석 상세화 run_id=%s candidates=%s detailed=%s", run.id, len(candidates), detailed)
+    return _step_done(db, run, candidates)
+
+
+def _step_done(db: Session, run: AnalysisRun, candidates: list[Candidate]) -> list[Candidate]:
+    run.done_steps += 1
+    db.commit()  # 진행률
+    return candidates
 
 
 def _save(
@@ -483,7 +757,7 @@ def _apply_refine(
         changes.update(kind=update.kind, kind_defaulted=False)
     if update.priority in priorities and update.priority != requirement.priority:
         changes.update(priority=update.priority, priority_defaulted=False)
-    question = (update.question or "").strip() or None
+    question = _question(update.question)
     if update.clear_question and requirement.ai_question and not question:
         changes["ai_question"] = None
     if question and question != requirement.ai_question:

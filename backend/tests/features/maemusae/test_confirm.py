@@ -313,6 +313,8 @@ def test_excel_sorts_and_merges_by_category():
     assert "B11:B13" in merged  # 회원 관리 3줄
     assert "C12:C13" in merged  # 회원 관리 > 로그인 2줄
     assert not any(r.startswith("B14") for r in merged)  # 빈 분류는 병합 안 함
+    assert [sheet.cell(11, c).value for c in (2, 3, 4)] == ["회원 관리", "가입", "-"]  # 빈 칸은 '-'
+    assert [sheet.cell(14, c).value for c in (2, 3, 4)] == ["-", "-", "-"]
     assert sheet.cell(10 + len(table) + 1, 1).value is None  # 번호가 비지 않으면 안내 없음
 
 
