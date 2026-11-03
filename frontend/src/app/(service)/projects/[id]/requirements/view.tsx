@@ -29,6 +29,10 @@ const SETUP_FAIL_TEXT: Record<string, string> = {
   LLM_NOT_CONFIGURED: "AI 키가 설정되지 않아 분석할 수 없어요. 관리자에게 문의해 주세요.",
   LLM_AUTH_FAILED: "AI 키가 올바르지 않아 분석할 수 없어요. 관리자에게 문의해 주세요.",
   LLM_QUOTA_EXCEEDED: "AI 사용 한도를 모두 써서 분석할 수 없어요. 관리자에게 문의해 주세요.",
+  // 개인 AI 키로 돌 때 (마이페이지에서 고칠 수 있음)
+  MMS_AI_KEY_REQUIRED: "AI 키가 없어 분석할 수 없어요. 마이페이지에서 내 AI 키를 등록해 주세요.",
+  MMS_AI_KEY_INVALID: "내 AI 키가 올바르지 않아 분석할 수 없어요. 마이페이지에서 키를 확인해 주세요.",
+  MMS_AI_KEY_QUOTA_EXCEEDED: "내 AI 키의 사용 한도를 모두 써서 분석할 수 없어요. 공급자 사이트에서 한도를 확인해 주세요.",
 };
 const failText = (code: string | null) =>
   (code && SETUP_FAIL_TEXT[code]) || `${(code && FAIL_TEXT[code]) || "분석하지 못했어요."} 잠시 후 다시 시도해 주세요.`;

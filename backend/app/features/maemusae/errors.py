@@ -224,3 +224,24 @@ class ConfirmedVersionNotFoundError(NotFoundError):
     # Excel 은 확정 기록에서만 만듦 (버전 추가·저장 기록은 받지 않음)
     def __init__(self):
         super().__init__("CONFIRMED_VERSION_NOT_FOUND", "확정 기록을 찾을 수 없습니다.")
+
+
+# ---- 개인 AI 키 (11/03) ----
+# 분석 실패(run.error_code)에도 같은 코드를 씁니다. 화면은 이 코드로 "마이페이지에서 키 확인" 안내를 보여 줌
+
+AI_KEY_REQUIRED = "MMS_AI_KEY_REQUIRED"
+AI_KEY_INVALID = "MMS_AI_KEY_INVALID"
+AI_KEY_QUOTA = "MMS_AI_KEY_QUOTA_EXCEEDED"
+
+
+class AiKeyStorageNotConfiguredError(AppError):
+    status_code = 503
+
+    def __init__(self):
+        super().__init__("MMS_AI_KEY_STORAGE_NOT_CONFIGURED", "지금은 AI 키를 저장할 수 없어요. 관리자에게 문의해 주세요.")
+
+
+class AiKeyRequiredError(ConflictError):
+    # 서버 키로 대신 돌리지 않습니다 (11/01·11/03 결정)
+    def __init__(self):
+        super().__init__(AI_KEY_REQUIRED, "AI 키가 없어 분석할 수 없어요. 마이페이지에서 내 AI 키를 등록해 주세요.")

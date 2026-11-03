@@ -3,10 +3,11 @@
 import { KeyRound, ShieldCheck, Trash2, UserRound, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { ApiKeyInput, MeAvatarField, MeNicknameForm, MePasswordForm, MeProfileForm, MeWithdrawForm, useAuth } from "@/meerkit";
+import { MeAvatarField, MeNicknameForm, MePasswordForm, MeProfileForm, MeWithdrawForm, useAuth } from "@/meerkit";
 import { cn } from "@/lib/utils";
 
 import { Btn, PageHead, Pill, card } from "../_components/ui";
+import { MyAiKeyField } from "./_components/MyAiKeyField";
 
 const SECTIONS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: "profile", label: "프로필", icon: UserRound },
@@ -148,13 +149,13 @@ export default function MyPage() {
             <MePasswordForm />
           </Section>
 
-          <Section id="api-key" title="AI API 키" desc="요구사항 분석에 쓸 내 AI API 키를 연결해요. 서버에 암호화해 저장하는 기능은 준비 중이에요.">
+          <Section id="api-key" title="AI API 키" desc="요구사항 분석에 쓸 내 AI API 키를 연결해요. 키는 서버에 암호화해 저장하고, 끝 네 자리만 보여 드려요.">
             <div className="mb-4 flex flex-wrap gap-1.5">
               <Pill tone="dark">OpenAI</Pill>
               <Pill className="text-[#6c6a62]">Claude · 준비 중</Pill>
               <Pill className="text-[#6c6a62]">Gemini · 준비 중</Pill>
             </div>
-            <ApiKeyInput />
+            <MyAiKeyField />
           </Section>
 
           <Section id="danger" danger title="계정 삭제" desc="탈퇴하면 로그인할 수 없게 되고, 보관 기간이 지나면 개인정보가 지워져요.">

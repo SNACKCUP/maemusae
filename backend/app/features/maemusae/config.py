@@ -1,6 +1,9 @@
 """매무새 설정. 매무새 모듈만 읽습니다 (킷은 이 설정을 모름). 환경 변수 이름은 MMS_ 로 시작합니다."""
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.core.config import settings as core_settings
 
 
 class MaemusaeSettings(BaseSettings):
@@ -40,5 +43,26 @@ class MaemusaeSettings(BaseSettings):
     # 지운 프로젝트 보관 기간. 지나면 정리 명령(app.features.maemusae.retention)이 원본 파일과 행을 실제로 지움
     mms_project_retention_days: int = 180
 
+    # 개인 AI 키 (11/03 결정: 사람마다, 서버에 암호화해 저장, 서버 키로 대신 돌리지 않음)
+    # 스위치. 켜면 분석·다시 분류를 누른 사람의 키로 돌리고, 키가 없으면 시작하지 않음. 끄면 지금처럼 서버 키(OPENAI_API_KEY).
+    # 문제가 생기면 이 값만 false 로 바꿔 다시 시작하면 원래대로 돌아감 (저장한 키는 그대로 남음)
+    mms_user_ai_key_enabled: bool = False
+    # 키 암호화 키 (Fernet). 쉼표로 여러 개를 넣으면 맨 앞 것으로 암호화하고 모두로 풀 수 있음 (키 교체용).
+    # 만들기: uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # 비우면 키 저장 기능이 꺼짐 (503). 잃어버리면 저장한 키를 풀 수 없으니 비밀 저장소에 따로 보관
+    mms_ai_key_encryption_key: SecretStr = SecretStr("")
+
 
 mms_settings = MaemusaeSettings()
+
+
+def production_problems() -> list[str]:
+    """APP_ENV=production 에서 매무새 쪽 위험한 설정. main.py 가 다른 검사와 합쳐 시작 전에 확인합니다. 값은 넣지 않습니다."""
+    if core_settings.app_env != "production":
+        return []
+    from app.features.maemusae.ai_keys.crypto import key_problem  # 순환 import 방지
+
+    problem = key_problem()
+    if problem:
+        return [f"MMS_AI_KEY_ENCRYPTION_KEY: {problem}"]
+    return []
