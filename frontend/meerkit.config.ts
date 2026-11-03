@@ -6,6 +6,8 @@ export default defineMeerkitConfig({
   theme: "meerkit",
   // false면 Meerkit 애니메이션을 모두 끈다
   motion: true,
+  // 매무새는 항상 밝은 테마라 오른쪽 아래 다크 모드 버튼을 끈다
+  themeToggle: false,
 
   signup: {
     passwordConfirm: false,

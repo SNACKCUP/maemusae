@@ -39,12 +39,12 @@ const SUBMIT_BUTTON = [
 ].join(" ");
 // 탈퇴는 빨간색으로 한 번 더 경고한다
 const DANGER_BUTTON = "[&_button[type=submit]]:bg-[#b3261e] [&_button[type=submit]]:shadow-[3px_3px_0_#111]";
-// 프로필 이미지 [삭제]는 글자 버튼이 아니라 테두리 있는 작은 버튼으로
+// 프로필 이미지: 펜 아이콘은 검은 테두리 흰 동그라미, [삭제]는 빨간 테두리 작은 버튼으로
 const AVATAR_BUTTONS = [
-  "[&_[data-slot=avatar-change]]:rounded-full [&_[data-slot=avatar-change]]:border-2 [&_[data-slot=avatar-change]]:border-[#111] [&_[data-slot=avatar-change]]:bg-white [&_[data-slot=avatar-change]]:font-semibold",
+  "[&_[data-slot=avatar-change]]:border-2 [&_[data-slot=avatar-change]]:border-[#111] [&_[data-slot=avatar-change]]:bg-white [&_[data-slot=avatar-change]]:text-[#111] [&_[data-slot=avatar-change]]:shadow-[2px_2px_0_#111]",
   "[&_[data-slot=avatar-remove]]:rounded-full [&_[data-slot=avatar-remove]]:border-2 [&_[data-slot=avatar-remove]]:border-[#b3261e] [&_[data-slot=avatar-remove]]:bg-white [&_[data-slot=avatar-remove]]:font-semibold [&_[data-slot=avatar-remove]]:text-[#b3261e]",
-  "[&_[data-slot=avatar-change]]:transition-transform [&_[data-slot=avatar-remove]]:transition-transform [&_[data-slot=avatar-change]]:duration-300 [&_[data-slot=avatar-remove]]:duration-300 [&_[data-slot=avatar-change]]:ease-[cubic-bezier(0.34,1.56,0.64,1)] [&_[data-slot=avatar-remove]]:ease-[cubic-bezier(0.34,1.56,0.64,1)]",
-  "[&_[data-slot=avatar-change]:enabled]:hover:scale-105 [&_[data-slot=avatar-remove]:enabled]:hover:scale-105 [&_[data-slot=avatar-change]:enabled]:active:scale-95 [&_[data-slot=avatar-remove]:enabled]:active:scale-95",
+  "[&_[data-slot=avatar-remove]]:transition-transform [&_[data-slot=avatar-remove]]:duration-300 [&_[data-slot=avatar-remove]]:ease-[cubic-bezier(0.34,1.56,0.64,1)]",
+  "[&_[data-slot=avatar-remove]:enabled]:hover:scale-105 [&_[data-slot=avatar-remove]:enabled]:active:scale-95",
   "[&_[data-slot=avatar-remove]:enabled]:hover:bg-[#ffd2b8]",
 ].join(" ");
 
