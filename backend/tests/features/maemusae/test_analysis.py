@@ -412,7 +412,7 @@ def test_retry_limit_then_fails(client, db, owner, docs_url, fake_llm, monkeypat
 
 def test_stage_models_come_from_settings(client, db, owner, docs_url, fake_llm, monkeypatch):
     asked = []
-    monkeypatch.setattr(runner, "get_chat_model", lambda *, model_name=None: asked.append(model_name) or fake_llm)
+    monkeypatch.setattr(runner, "get_chat_model", lambda *, api_key=None, model_name=None: asked.append(model_name) or fake_llm)
     monkeypatch.setattr(mms_settings, "mms_analyze_expand", True)
     monkeypatch.setattr(mms_settings, "mms_extract_model", "fast-model")
     monkeypatch.setattr(mms_settings, "mms_expand_model", " ")  # 비우면 LLM_MODEL (None)
@@ -427,7 +427,7 @@ def test_stage_models_come_from_settings(client, db, owner, docs_url, fake_llm, 
 
 def test_large_document_uses_large_extract_model(client, db, owner, docs_url, fake_llm, monkeypatch):
     asked = []
-    monkeypatch.setattr(runner, "get_chat_model", lambda *, model_name=None: asked.append(model_name) or fake_llm)
+    monkeypatch.setattr(runner, "get_chat_model", lambda *, api_key=None, model_name=None: asked.append(model_name) or fake_llm)
     monkeypatch.setattr(mms_settings, "mms_extract_model", "normal-model")
     monkeypatch.setattr(mms_settings, "mms_extract_model_large", "large-doc-model")
     monkeypatch.setattr(mms_settings, "mms_large_doc_chars", len(SECRET_TEXT) - 1)  # 이 문서가 "큰 문서"
@@ -442,7 +442,7 @@ def test_large_document_uses_large_extract_model(client, db, owner, docs_url, fa
 
 def test_small_document_keeps_extract_model(client, db, owner, docs_url, fake_llm, monkeypatch):
     asked = []
-    monkeypatch.setattr(runner, "get_chat_model", lambda *, model_name=None: asked.append(model_name) or fake_llm)
+    monkeypatch.setattr(runner, "get_chat_model", lambda *, api_key=None, model_name=None: asked.append(model_name) or fake_llm)
     monkeypatch.setattr(mms_settings, "mms_extract_model", "normal-model")
     monkeypatch.setattr(mms_settings, "mms_extract_model_large", "large-doc-model")
     monkeypatch.setattr(mms_settings, "mms_large_doc_chars", len(SECRET_TEXT))  # 넘지 않음
@@ -456,7 +456,7 @@ def test_small_document_keeps_extract_model(client, db, owner, docs_url, fake_ll
 
 def test_fallback_model_after_retries_fail(client, db, owner, docs_url, fake_llm, monkeypatch, caplog):
     asked = []
-    monkeypatch.setattr(runner, "get_chat_model", lambda *, model_name=None: asked.append(model_name) or fake_llm)
+    monkeypatch.setattr(runner, "get_chat_model", lambda *, api_key=None, model_name=None: asked.append(model_name) or fake_llm)
     monkeypatch.setattr(mms_settings, "mms_fallback_model", "backup-model")
     _add_text(client, docs_url, owner)
     fake_llm.responses = [LLMTimeoutError("LLM_TIMEOUT", "늦음"), {"requirements": [_req("이메일 회원가입")]}]

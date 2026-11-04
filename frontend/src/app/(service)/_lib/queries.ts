@@ -18,6 +18,7 @@ const keys = {
   sources: (id: string, docId: number) => ["mms", "projects", id, "documents", docId, "sources"] as const,
   pages: (id: string, docId: number, sourceId: number) => ["mms", "projects", id, "documents", docId, "sources", sourceId] as const,
   code: (group: string) => ["mms", "codes", group] as const,
+  aiKey: ["mms", "me", "ai-key"] as const,
   // 한 문서의 후보·입력·분석·버전은 모두 doc(id, docId) 아래에 두어 한꺼번에 다시 불러올 수 있게 한다
   doc: (id: string, docId: number) => ["mms", "projects", id, "doc", docId] as const,
   requirements: (id: string, docId: number) => ["mms", "projects", id, "doc", docId, "requirements"] as const,
@@ -37,6 +38,28 @@ function useReady() {
 }
 
 // ---- 프로젝트·멤버 ----
+
+// ---- 내 AI 키 (마이페이지) ----
+
+export function useMyAiKey() {
+  return useQuery({ queryKey: keys.aiKey, queryFn: () => mmsApi.getMyAiKey(), enabled: useReady() });
+}
+
+export function useSaveMyAiKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (apiKey: string) => mmsApi.saveMyAiKey(apiKey),
+    onSuccess: (saved) => qc.setQueryData(keys.aiKey, saved),
+  });
+}
+
+export function useDeleteMyAiKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => mmsApi.deleteMyAiKey(),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.aiKey }),
+  });
+}
 
 export function useProjects() {
   return useQuery({ queryKey: keys.projects, queryFn: () => mmsApi.listProjects(), enabled: useReady() });

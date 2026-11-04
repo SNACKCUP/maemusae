@@ -300,7 +300,22 @@ function filenameOf(header: unknown): string | null {
   }
 }
 
+/** 내 AI 키 상태 (/mms/me/ai-key). 키 원문은 오지 않고 끝 4자리만 */
+export interface ApiAiKey {
+  /** 서버에 키 저장 기능이 설정되어 있는지. false면 저장 칸을 "준비 중"으로 */
+  storage_ready: boolean;
+  /** 분석이 개인 키로 도는지. false면 지금은 서비스 키로 분석 */
+  in_use: boolean;
+  provider: "openai" | null;
+  key_hint: string | null;
+}
+
 export const mmsApi = {
+  // 내 AI 키 (마이페이지)
+  getMyAiKey: () => api.get<ApiAiKey>("/mms/me/ai-key").then(data),
+  saveMyAiKey: (apiKey: string) => api.put<ApiAiKey>("/mms/me/ai-key", { provider: "openai", api_key: apiKey }).then(data),
+  deleteMyAiKey: () => api.delete("/mms/me/ai-key"),
+
   // 프로젝트·멤버
   listProjects: (q?: string) => api.get<ApiProjectPage>(P, { params: { q: q || undefined, size: 100 } }).then(data),
   getProject: (id: string) => api.get<ApiProject>(`${P}/${id}`).then(data),

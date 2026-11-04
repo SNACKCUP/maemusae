@@ -24,6 +24,7 @@ import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import partial
@@ -34,6 +35,8 @@ from sqlalchemy.orm import Session
 from app.codes import list_codes
 from app.core.database import SessionLocal
 from app.core.exceptions import AppError
+from app.features.maemusae import errors as mms_errors
+from app.features.maemusae.ai_keys import service as ai_keys
 from app.features.maemusae.analysis import repository
 from app.features.maemusae.analysis.batching import PageRef, locate, normalize, tag_of
 from app.features.maemusae.analysis.categories import CategoryBook, CategoryPath
@@ -106,6 +109,33 @@ def _new_session() -> Iterator[Session]:
 
 open_session = _new_session  # 테스트가 테스트 세션으로 바꿔 끼웁니다
 
+# 이번 분석이 쓸 개인 AI 키 (스위치가 꺼져 있으면 None = 서버 키). 모델은 이 스레드에서 만들므로 ContextVar 로 충분.
+# 키 원문은 이 변수와 모델 객체 안에만 있고 DB·로그에 다시 쓰지 않습니다
+_run_api_key: ContextVar[str | None] = ContextVar("mms_run_api_key", default=None)
+# 개인 키로 돌 때 공급자 키 오류를 "마이페이지에서 키 확인" 코드로 바꿈 (서버 키 오류는 "관리자에게 문의" 그대로)
+_PERSONAL_KEY_CODES = {
+    "LLM_AUTH_FAILED": mms_errors.AI_KEY_INVALID,
+    "LLM_QUOTA_EXCEEDED": mms_errors.AI_KEY_QUOTA,
+}
+
+
+@contextmanager
+def _using_requester_key(db: Session, run_id: int) -> Iterator[None]:
+    run = repository.get_run(db, run_id)
+    key = ai_keys.key_for_run(db, run.requested_by) if run is not None and run.status == RUNNING else None
+    token = _run_api_key.set(key)
+    try:
+        yield
+    finally:
+        _run_api_key.reset(token)
+
+
+def _error_code(e: Exception) -> str:
+    code = e.code if isinstance(e, AppError) else FAILED_CODE
+    if _run_api_key.get() is not None:
+        return _PERSONAL_KEY_CODES.get(code, code)
+    return code
+
 
 @dataclass
 class Candidate:
@@ -123,9 +153,22 @@ class Candidate:
 def run_analysis(run_id: int) -> None:
     try:
         with open_session() as db:
-            _run(db, run_id)
+            _run_with_key(db, run_id, _run)
     except Exception as e:  # noqa: BLE001 — 실패 처리까지 실패한 경우 (DB 끊김 등). 멈춘 분석은 진행률을 읽을 때 정리됨
         logger.error("AI 분석 실패 처리 못함 run_id=%s error_type=%s", run_id, type(e).__name__)
+
+
+def _run_with_key(db: Session, run_id: int, body: Callable[[Session, int], None]) -> None:
+    """누른 사람의 개인 키를 꺼내 두고 분석을 돌림. 키가 없거나 풀 수 없으면 서버 키로 돌리지 않고 실패"""
+    try:
+        with _using_requester_key(db, run_id):
+            body(db, run_id)
+    except AppError as e:  # 키 꺼내기 실패 (분석 본문의 오류는 body 안에서 처리됨)
+        db.rollback()
+        run = repository.get_run(db, run_id)
+        if run is not None:
+            _fail(db, run_id, run.document_id, e.code)
+            logger.warning("AI 분석 시작 못함 run_id=%s code=%s", run_id, e.code)
 
 
 def _run(db: Session, run_id: int) -> None:
@@ -146,7 +189,7 @@ def _run(db: Session, run_id: int) -> None:
         count = _save(db, run_id, document_id, candidates, plan.by_tag)
     except Exception as e:  # noqa: BLE001 — 어느 단계 오류든 run 을 FAILED 로 남겨야 화면이 멈추지 않음
         db.rollback()
-        code = e.code if isinstance(e, AppError) else FAILED_CODE
+        code = _error_code(e)
         _fail(db, run_id, document_id, code)
         logger.warning(
             "AI 분석 실패 run_id=%s document_id=%s code=%s error_type=%s ms=%d",
@@ -167,13 +210,13 @@ def _code_text(db: Session, group: str) -> tuple[str, list[str]]:
 
 def _stage_model(name: str):
     """단계별 모델 (MMS_EXTRACT_MODEL 등). 비우면 LLM_MODEL. 랭체인은 킷(app.llm)만 직접 다룸"""
-    return get_chat_model(model_name=name.strip() or None)
+    return get_chat_model(api_key=_run_api_key.get(), model_name=name.strip() or None)
 
 
 def _fallback_model():
     """대체 모델 (MMS_FALLBACK_MODEL). 비우면 None"""
     name = mms_settings.mms_fallback_model.strip()
-    return get_chat_model(model_name=name) if name else None
+    return get_chat_model(api_key=_run_api_key.get(), model_name=name) if name else None
 
 
 def _llm_call(prompt, schema, variables: dict, model, fallback_model, step: str):
@@ -356,7 +399,9 @@ def _dedupe(candidates: list[Candidate]) -> list[Candidate]:
     if len(text) > budget:
         logger.info("AI 분석 합치기 건너뜀 candidates=%s", len(candidates))
         return candidates
-    result = invoke_structured(load_prompt(PROMPTS / "dedupe.md"), DedupeResult, {"candidates": text})
+    result = invoke_structured(
+        load_prompt(PROMPTS / "dedupe.md"), DedupeResult, {"candidates": text}, model=_stage_model("")
+    )
 
     merged_into: dict[int, int] = {}  # 후보 번호(0부터) → 남길 후보 번호
     for group in result.groups:
@@ -621,7 +666,7 @@ MATCH_MAX_EXISTING = 60
 def run_refine(run_id: int) -> None:
     try:
         with open_session() as db:
-            _run_refine(db, run_id)
+            _run_with_key(db, run_id, _run_refine)
     except Exception as e:  # noqa: BLE001 — run_analysis 와 같은 이유
         logger.error("AI 다시 분류 실패 처리 못함 run_id=%s error_type=%s", run_id, type(e).__name__)
 
@@ -648,7 +693,7 @@ def _run_refine(db: Session, run_id: int) -> None:
         result = _save_refine(db, run_id, document_id, plan, updates, new_candidates, merges, book)
     except Exception as e:  # noqa: BLE001 — 어느 단계 오류든 run 을 FAILED 로 남겨야 화면이 멈추지 않음
         db.rollback()
-        code = e.code if isinstance(e, AppError) else FAILED_CODE
+        code = _error_code(e)
         _fail(db, run_id, document_id, code)
         logger.warning(
             "AI 다시 분류 실패 run_id=%s document_id=%s code=%s error_type=%s ms=%d",
@@ -684,6 +729,7 @@ def _ask_refine(
                 "categories": book.prompt_text(),
                 "targets": "\n\n".join(t.text for t in chunk),
             },
+            model=_stage_model(""),
         )
         for update in result.updates:
             tag = _ref(update.ref)
@@ -736,7 +782,9 @@ def _match(
     if len(text) > llm_settings.llm_max_input_chars - DEDUPE_HEADROOM or len(lines) < 2:
         logger.info("AI 다시 분류 맞춰 보기 건너뜀 candidates=%s existing=%s", len(candidates), len(related))
         return candidates, {}
-    result = invoke_structured(load_prompt(PROMPTS / "dedupe.md"), DedupeResult, {"candidates": text})
+    result = invoke_structured(
+        load_prompt(PROMPTS / "dedupe.md"), DedupeResult, {"candidates": text}, model=_stage_model("")
+    )
 
     used: set[int] = set()
     into_existing: dict[int, int] = {}  # 새 후보 번호(0부터) → 기존 후보 id

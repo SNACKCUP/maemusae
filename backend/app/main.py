@@ -9,18 +9,22 @@ from app.core.database import SessionLocal
 from app.core.exceptions import AppError, register_exception_handlers
 from app.core.logging import setup_logging
 from app.core.middleware import RequestContextMiddleware
+from app.features.maemusae.config import (
+    production_problems as maemusae_production_problems,
+)
 from app.llm.config import production_problems as llm_production_problems
 from app.social.config import production_problems as social_production_problems
 from app.storage.config import production_problems as storage_production_problems
 
 
 def check_startup() -> None:
-    """공통 설정(core)·LLM·저장소·소셜 로그인 설정의 운영 검사를 합쳐서, 고칠 목록이 있으면 시작을 멈춥니다."""
+    """공통 설정(core)·LLM·저장소·소셜 로그인·매무새 설정의 운영 검사를 합쳐서, 고칠 목록이 있으면 시작을 멈춥니다."""
     problems = (
         settings.production_problems()
         + llm_production_problems()
         + storage_production_problems()
         + social_production_problems()
+        + maemusae_production_problems()
     )
     if problems:
         raise RuntimeError("운영 설정을 고친 뒤 다시 시작하세요.\n- " + "\n- ".join(problems))

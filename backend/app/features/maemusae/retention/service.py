@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.core.logging import setup_logging
+from app.features.maemusae.ai_keys import repository as ai_key_repository
 from app.features.maemusae.config import mms_settings
 from app.features.maemusae.retention import repository
 from app.storage import PrivateStorage, get_private_storage
@@ -27,6 +28,7 @@ class RetentionResult:
     projects: int = 0  # 지운(dry-run 이면 지울) 프로젝트 수
     files: int = 0  # 지운(dry-run 이면 지울) 원본 파일 수
     skipped: list[int] = field(default_factory=list)  # 원본 삭제에 실패해 건너뛴 프로젝트 id
+    ai_keys: int = 0  # 지운(dry-run 이면 지울) 탈퇴 회원의 개인 AI 키 수
 
 
 def purge_deleted_projects(
@@ -62,6 +64,14 @@ def purge_deleted_projects(
     return result
 
 
+def purge_withdrawn_ai_keys(db: Session, *, apply: bool = False) -> int:
+    """탈퇴한 회원의 개인 AI 키. 탈퇴하면 로그인할 수 없어 쓸 일이 없으므로 보관 기간을 기다리지 않고 지웁니다"""
+    count = ai_key_repository.delete_of_withdrawn(db, apply=apply)
+    if apply:
+        db.commit()
+    return count
+
+
 def _delete_files(storage: PrivateStorage, project_id: int, keys: list[str]) -> bool:
     for key in keys:
         try:
@@ -82,13 +92,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with SessionLocal() as db:
             result = purge_deleted_projects(db, apply=args.apply)
+            result.ai_keys = purge_withdrawn_ai_keys(db, apply=args.apply)
     except Exception:
         logger.exception("매무새 보관 기간 정리 실패. DATABASE_URL·저장소 설정과 DB 상태를 확인한 뒤 다시 실행하세요.")
         return 1
     action = "삭제" if args.apply else "대상"
     logger.info(
-        "보관 기간(%s일)이 지난 프로젝트 %s %s건, 원본 파일 %s건, 건너뜀 %s건",
+        "보관 기간(%s일)이 지난 프로젝트 %s %s건, 원본 파일 %s건, 건너뜀 %s건, 탈퇴 회원 AI 키 %s건",
         mms_settings.mms_project_retention_days, action, result.projects, result.files, len(result.skipped),
+        result.ai_keys,
     )
     # 건너뛴 프로젝트가 있으면 실패로 끝내 워크플로 화면에서 보이게 합니다 (다음 날 다시 시도)
     return 1 if result.skipped else 0

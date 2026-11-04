@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from app.features.maemusae.ai_keys.router import router as ai_key_router
 from app.features.maemusae.analysis.router import router as analysis_router
 from app.features.maemusae.confirm.router import router as confirm_router
 from app.features.maemusae.documents.router import router as documents_router
@@ -24,3 +25,4 @@ router.include_router(analysis_router)
 router.include_router(review_router)
 router.include_router(versions_router)
 router.include_router(confirm_router)
+router.include_router(ai_key_router)

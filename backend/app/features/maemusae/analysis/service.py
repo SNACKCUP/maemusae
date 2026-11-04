@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.features.maemusae.access import ProjectAccess
+from app.features.maemusae.ai_keys import service as ai_keys
 from app.features.maemusae.analysis import repository
 from app.features.maemusae.analysis.batching import Batch, PageRef, make_batches
 from app.features.maemusae.analysis.models import (
@@ -243,6 +244,7 @@ def start_analysis(db: Session, access: ProjectAccess, document_id: int, body: A
 def _start_checks(db: Session, access: ProjectAccess, document_id: int) -> Document:
     if access.member is None:  # 보기 전용 MASTER
         raise ProjectMemberRequiredError()
+    ai_keys.require_key(db, access.principal.user_id)  # 개인 키 스위치가 켜져 있으면 누른 사람의 키가 있어야 함
     if documents_repository.get_document(db, access.project.id, document_id) is None:
         raise DocumentNotFoundError()
     expire_stale(db, document_id)

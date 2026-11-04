@@ -132,6 +132,7 @@ def test_logs_have_ids_and_counts_only(db, make_project, private_storage, caplog
 def test_main_exit_codes(monkeypatch):
     monkeypatch.setattr(service, "SessionLocal", lambda: _NullSession())
     monkeypatch.setattr(service, "purge_deleted_projects", lambda db, apply=False: service.RetentionResult())
+    monkeypatch.setattr(service, "purge_withdrawn_ai_keys", lambda db, apply=False: 0)
     assert service.main([]) == 0
     monkeypatch.setattr(service, "purge_deleted_projects", lambda db, apply=False: service.RetentionResult(skipped=[7]))
     assert service.main(["--apply"]) == 1
