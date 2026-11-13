@@ -19,6 +19,7 @@ export { RoleAssignDialog } from "./admin/components/RoleAssignDialog";
 export { useMembers, useUpdateRoles, useUpdateActive, useRemoveMember } from "./admin/queries";
 export { meerkitConfig } from "./config";
 export { api } from "./api/client";
+export { errorMessage } from "./api/error";
 export { ROLES, ADMIN_ROLE, hasRole, isAdminUser } from "./roles";
 export type { RoleName } from "./roles";
 export type { Role, User } from "./types";
