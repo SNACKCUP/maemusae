@@ -46,3 +46,25 @@ def delete_of_deleted_users(db: Session) -> int:
     """개인정보를 지운 회원의 연결 삭제. 지운 건수"""
     result = db.execute(delete(SocialAccount).where(SocialAccount.user_id.in_(_of_deleted_users())))
     return result.rowcount or 0
+
+
+# ---- 개인정보 암호화 칸 채우기 (계획 23 K2, app.social.pii_backfill) ----
+
+
+def _email_enc_missing():
+    return SocialAccount.email.is_not(None) & SocialAccount.email_enc.is_(None)
+
+
+def email_enc_missing_batch(db: Session, after_id: int, limit: int) -> list[SocialAccount]:
+    return list(
+        db.scalars(
+            select(SocialAccount)
+            .where(_email_enc_missing(), SocialAccount.id > after_id)
+            .order_by(SocialAccount.id)
+            .limit(limit)
+        )
+    )
+
+
+def count_email_enc_missing(db: Session) -> int:
+    return db.scalar(select(func.count()).select_from(SocialAccount).where(_email_enc_missing())) or 0

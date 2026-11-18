@@ -24,6 +24,9 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
       SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+      # 회원을 저장할 때 개인정보 암호화 칸을 같이 채우므로 키가 필요합니다 (Render 와 같은 값, 저장소 Secrets)
+      PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
+      PII_HMAC_KEY: ${{ secrets.PII_HMAC_KEY }}
       SEED_ADMIN_USER_ID: ${{ vars.SEED_ADMIN_USER_ID }}
       SEED_ADMIN_EMAIL: ${{ vars.SEED_ADMIN_EMAIL }}
       JWT_SECRET_KEY: seed-job-${{ github.run_id }}-${{ github.run_attempt }}-unused

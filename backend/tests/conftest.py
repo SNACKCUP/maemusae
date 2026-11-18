@@ -15,6 +15,7 @@ if settings.test_database_url:
     settings.database_url = settings.test_database_url
 settings.mail_backend = "fake"  # 테스트에서는 메일을 보내지 않고 mail_outbox에 쌓습니다
 
+
 # 개발·운영 DB에서 테스트가 돌지 않도록 이름이 _test로 끝나는 DB만 허용합니다.
 _test_url = make_url(settings.database_url)
 if not (_test_url.database or "").endswith("_test"):
@@ -41,6 +42,15 @@ def _prepare_test_db() -> None:
 
 
 _prepare_test_db()
+
+# 개인정보 암호화 키 (마이그레이션 뒤에 import: alembic 의 fileConfig 가 그 전에 만들어진 app.* 로거를 꺼 버림): 개발자 .env·CI 와 상관없이 테스트 전용 고정 키를 씁니다 (회원을 저장할 때마다 암호화 칸을 채움)
+from pydantic import SecretStr
+
+from app.crypto.config import crypto_settings
+
+crypto_settings.pii_encryption_keys = SecretStr("1:" + "dGVzdC1vbmx5LWtleS0tLS0tLS0tLS0tLS0tLS0tLS0=")
+crypto_settings.pii_hmac_key = SecretStr("dGVzdC1vbmx5LWhtYWMtLS0tLS0tLS0tLS0tLS0tLS0=")
+crypto_settings.pii_encryption_active_key = None
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session

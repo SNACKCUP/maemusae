@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.features.maemusae.invitations.models import ProjectInvitation
@@ -71,3 +71,25 @@ def get_user(db: Session, user_id: int) -> User | None:
 def add(db: Session, row: ProjectInvitation) -> None:
     db.add(row)
     db.flush()
+
+
+# ---- 이메일 암호화 칸 채우기 (계획 23 M1, app.features.maemusae.invitations.pii_backfill) ----
+
+
+def _email_pii_missing():
+    return ProjectInvitation.email_hash.is_(None)
+
+
+def email_pii_missing_batch(db: Session, after_id: int, limit: int) -> list[ProjectInvitation]:
+    return list(
+        db.scalars(
+            select(ProjectInvitation)
+            .where(_email_pii_missing(), ProjectInvitation.id > after_id)
+            .order_by(ProjectInvitation.id)
+            .limit(limit)
+        )
+    )
+
+
+def count_email_pii_missing(db: Session) -> int:
+    return db.scalar(select(func.count()).select_from(ProjectInvitation).where(_email_pii_missing())) or 0

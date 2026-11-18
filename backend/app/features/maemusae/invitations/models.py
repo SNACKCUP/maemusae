@@ -4,14 +4,28 @@
 
 링크 토큰의 원문은 메일에만 있고 DB에는 HMAC 해시(token_hash)만 둡니다. 7일 뒤 만료, 한 번만 쓰고,
 같은 이메일로 다시 초대하면 이전 초대는 revoked_at 으로 무효가 됩니다.
+
+이메일 암호화 (계획 23 M1): email_enc(암호문)와 email_hash(지문)를 저장할 때 자동으로 같이 채웁니다.
+M2 에서 찾기를 email_hash 로 옮기고 평문 email 칸을 지웁니다.
 """
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    event,
+    func,
+    inspect,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.crypto import EncryptedString, email_index
 
 INVITE_EXPIRE_DAYS = 7
 
@@ -33,6 +47,9 @@ class ProjectInvitation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("mms_projects.id", ondelete="CASCADE"))
     email: Mapped[str] = mapped_column(String(255), index=True)  # 소문자로 저장
+    # 위 email 의 암호문과 지문 (계획 23 M1). 저장할 때 자동으로 채움. M2 에서 찾기를 email_hash 로 옮김
+    email_enc: Mapped[str | None] = mapped_column(EncryptedString("mms_project_invitations.email"))
+    email_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     role: Mapped[str] = mapped_column(String(20))  # 수락하면 받을 프로젝트 역할
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     invited_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
@@ -41,3 +58,19 @@ class ProjectInvitation(Base):
     accepted_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 취소 또는 다시 초대
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+def fill_email_pii(inv: ProjectInvitation) -> None:
+    inv.email_enc = inv.email
+    inv.email_hash = email_index(inv.email) if inv.email is not None else None
+
+
+@event.listens_for(ProjectInvitation, "before_insert")
+def _fill_email_pii_on_insert(mapper, connection, inv: ProjectInvitation) -> None:
+    fill_email_pii(inv)
+
+
+@event.listens_for(ProjectInvitation, "before_update")
+def _fill_email_pii_on_update(mapper, connection, inv: ProjectInvitation) -> None:
+    if inspect(inv).attrs.email.history.has_changes() or inv.email_hash is None:
+        fill_email_pii(inv)

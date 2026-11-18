@@ -8,11 +8,21 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, false
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    event,
+    false,
+    inspect,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.core.models import TimestampMixin
+from app.crypto import EncryptedString
 
 
 class SocialAccount(TimestampMixin, Base):
@@ -33,7 +43,20 @@ class SocialAccount(TimestampMixin, Base):
 
     # 아래는 마지막 로그인 때 공급자가 준 값 (표시·연결 판단용). users 의 값을 바꾸지 않습니다.
     email: Mapped[str | None] = mapped_column(String(255))  # 동의하지 않으면 없을 수 있음 (Kakao·Naver)
+    # 위 email 의 암호문 (계획 23). 지금(K2)은 저장할 때 자동으로 같이 채우고, K3 에서 읽기를 옮긴 뒤 email 칸을 지웁니다
+    email_enc: Mapped[str | None] = mapped_column(EncryptedString("social_accounts.email"))
     email_verified: Mapped[bool] = mapped_column(Boolean, server_default=false())  # 공급자가 검증을 보장할 때만 true
     name: Mapped[str | None] = mapped_column(String(50))
     profile_image_url: Mapped[str | None] = mapped_column(String(500))  # 공급자 주소 그대로 (저장소에 복사하지 않음)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+@event.listens_for(SocialAccount, "before_insert")
+def _fill_email_enc_on_insert(mapper, connection, account: SocialAccount) -> None:
+    account.email_enc = account.email
+
+
+@event.listens_for(SocialAccount, "before_update")
+def _fill_email_enc_on_update(mapper, connection, account: SocialAccount) -> None:
+    if inspect(account).attrs.email.history.has_changes() or (account.email is not None and account.email_enc is None):
+        account.email_enc = account.email

@@ -1,0 +1,59 @@
+# 개인정보 암호화 칸 채우기 (계획 23 K2). 칸을 만든 마이그레이션과 새 코드를 배포한 뒤, 기존 행을 한 번 채웁니다.
+# 손으로만 실행합니다 (Actions → pii-backfill → Run workflow). 처음엔 dry_run 으로 건수를 보고, 다음에 끄고 실행하세요.
+# 여러 번 실행해도 안전합니다 (이미 채운 행은 건너뜀).
+#
+# 준비 (저장소 Settings → Secrets and variables → Actions → Repository secrets):
+#   - PII_ENCRYPTION_KEYS, PII_HMAC_KEY  Render 에 넣은 값과 똑같이 (다르면 서버가 이 값을 못 풂)
+#   - PROD_DATABASE_URL 은 production 환경에 이미 있는 값을 씀
+name: pii-backfill
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "처리하지 않고 남은 건수만 확인"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pii-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      APP_ENV: production
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
+      PII_HMAC_KEY: ${{ secrets.PII_HMAC_KEY }}
+      # 이 작업은 토큰을 만들지 않지만 설정 로딩에 필요한 값이라 실행마다 임의 값을 넣습니다
+      JWT_SECRET_KEY: pii-backfill-job-${{ github.run_id }}-${{ github.run_attempt }}-unused
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$PII_ENCRYPTION_KEYS" ] || [ -z "$PII_HMAC_KEY" ]; then
+            echo "::error::PROD_DATABASE_URL, PII_ENCRYPTION_KEYS, PII_HMAC_KEY secret 이 모두 있어야 합니다."
+            exit 1
+          fi
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --no-dev
+      - name: Backfill
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            uv run python -m app.users.pii_backfill --dry-run
+            uv run python -m app.social.pii_backfill --dry-run
+            uv run python -m app.features.maemusae.invitations.pii_backfill --dry-run
+          else
+            uv run python -m app.users.pii_backfill
+            uv run python -m app.social.pii_backfill
+            uv run python -m app.features.maemusae.invitations.pii_backfill
+          fi
