@@ -64,3 +64,18 @@ def test_backfill_fills_old_rows(client, db, make_user, login, mail_outbox):
 
 def test_backfill_command_dry_run_succeeds(db):
     assert pii_backfill.main(["--dry-run"]) == 0
+
+
+def test_backfill_command_loads_related_tables_on_its_own():
+    """명령으로 따로 실행하면 앱 전체 모델이 안 올라옴. 초대가 가리키는 테이블도 직접 불러와야 저장할 수 있음
+    (2026-11-19 운영 pii-backfill 이 NoReferencedTableError: mms_projects 로 실패했던 문제)"""
+    import subprocess
+    import sys
+
+    code = (
+        "import app.features.maemusae.invitations.pii_backfill\n"
+        "from app.features.maemusae.invitations.models import ProjectInvitation\n"
+        "ProjectInvitation.__mapper__.base_mapper._sorted_tables\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr[-2000:]
