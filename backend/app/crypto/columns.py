@@ -12,14 +12,31 @@ DB 타입은 bytea 입니다. 암호문은 매번 달라 WHERE·ORDER BY 에 쓸
 from datetime import date
 
 from sqlalchemy import LargeBinary
+from sqlalchemy.sql import operators
 from sqlalchemy.types import TypeDecorator
 
 from app.crypto.aead import decrypt, encrypt
+
+# IS NULL / IS NOT NULL 만 허용합니다. == · ilike · 정렬은 암호문이 매번 달라 조용히 틀린 결과가 나오므로 막습니다.
+_ALLOWED_OPS = {operators.is_, operators.is_not}
+
+
+class _NoCompare(TypeDecorator.Comparator):
+    def operate(self, op, *other, **kwargs):
+        if op not in _ALLOWED_OPS:
+            raise TypeError("암호화 칸은 WHERE·정렬에 쓸 수 없습니다. 지문 칸(email_hash·phone_hash)으로 찾으세요.")
+        return super().operate(op, *other, **kwargs)
+
+    def reverse_operate(self, op, other, **kwargs):
+        if op not in _ALLOWED_OPS:
+            raise TypeError("암호화 칸은 WHERE·정렬에 쓸 수 없습니다. 지문 칸(email_hash·phone_hash)으로 찾으세요.")
+        return super().reverse_operate(op, other, **kwargs)
 
 
 class EncryptedString(TypeDecorator[str]):
     impl = LargeBinary
     cache_ok = True
+    comparator_factory = _NoCompare
 
     def __init__(self, aad: str) -> None:
         super().__init__()
@@ -41,6 +58,7 @@ class EncryptedDate(TypeDecorator[date]):
 
     impl = LargeBinary
     cache_ok = True
+    comparator_factory = _NoCompare
 
     def __init__(self, aad: str) -> None:
         super().__init__()

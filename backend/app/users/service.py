@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import AppError
 from app.core.security import generate_token, hash_password, verify_password
 from app.storage import get_storage
-from app.users import avatar, repository
+from app.users import avatar, pii, repository
 from app.users.models import Role, Term, User
 from app.users.roles import DEFAULT_ROLE
 
@@ -76,6 +76,7 @@ def create_user(
         raise UserError("EMAIL_TAKEN", "이미 가입된 이메일입니다.")
     if profile.get("nickname") and repository.get_by_nickname(db, profile["nickname"]):
         raise UserError("NICKNAME_TAKEN", "이미 사용 중인 닉네임입니다.")
+    pii.check_phone(profile.get("phone"))  # 틀리면 400 INVALID_PHONE
     terms = _check_terms(db, agreed_terms) if agreed_terms is not None else []
     user = User(
         login_id=login_id,
@@ -139,6 +140,8 @@ def update_profile(
             user.email = email
             user.email_verified_at = datetime.now(UTC) if email_verified else None
         changes = {k: v for k, v in changes.items() if k != "email"}
+    if "phone" in changes:
+        pii.check_phone(changes["phone"])  # 틀리면 400 INVALID_PHONE
     nickname = changes.get("nickname")
     if nickname and nickname != user.nickname:
         other = repository.get_by_nickname(db, nickname)
@@ -237,6 +240,14 @@ def anonymize(user: User) -> None:
 
 
 # ---- 관리자 ----
+
+
+def get_user_for_admin(db: Session, user_id: int) -> User:
+    """관리자 상세 보기 (이메일 전체). 목록은 가린 이메일만 보여 줍니다 (계획 23 D7)"""
+    user = repository.get_by_id(db, user_id)
+    if user is None:
+        raise UserError("USER_NOT_FOUND", "사용자를 찾을 수 없습니다.")
+    return user
 
 
 def _get_other_user(db: Session, actor: User, user_id: int) -> User:

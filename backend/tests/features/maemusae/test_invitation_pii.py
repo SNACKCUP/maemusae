@@ -1,9 +1,9 @@
-"""매무새 초대 이메일 암호화 (계획 23 M1): 저장할 때 암호문·지문을 같이 채우고, 채우기 명령이 기존 행을 채움"""
+"""매무새 초대 이메일 암호화 (계획 23 M2): DB 에는 암호문·지문만, 찾기는 지문으로"""
 
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select, text
 
 from app.crypto import decrypt, email_index
-from app.features.maemusae.invitations import pii_backfill
 from app.features.maemusae.invitations.models import ProjectInvitation
 from app.users.models import User
 
@@ -27,14 +27,18 @@ def _invite(client, project, hdrs, email: str) -> None:
     assert response.status_code == 201, response.text
 
 
-def test_invite_stores_email_ciphertext_and_hash(client, db, make_user, login, mail_outbox):
+def _pending(client, project, hdrs) -> list[dict]:
+    response = client.get(f"{PROJECTS}/{project['id']}/invitations", headers=hdrs)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_invite_stores_only_ciphertext_and_hash(client, db, make_user, login, mail_outbox):
     project, hdrs = _owner_project(client, db, make_user, login)
     _invite(client, project, hdrs, "Dana@Example.com")
 
     inv = db.scalar(select(ProjectInvitation).where(ProjectInvitation.project_id == project["id"]))
-    db.refresh(inv)
-    assert inv.email == "dana@example.com"
-    assert inv.email_enc == "dana@example.com"  # 속성으로 읽으면 풀린 값
+    assert inv.email == "dana@example.com"  # 속성으로 읽으면 풀린 값
     assert inv.email_hash == email_index("DANA@example.com")  # 대소문자 무시
 
     raw = db.execute(
@@ -44,38 +48,17 @@ def test_invite_stores_email_ciphertext_and_hash(client, db, make_user, login, m
     assert decrypt(bytes(raw), "mms_project_invitations.email") == "dana@example.com"
 
 
-def test_backfill_fills_old_rows(client, db, make_user, login, mail_outbox):
+def test_plaintext_email_column_is_gone(db):
+    columns = {c["name"] for c in sa_inspect(db.get_bind()).get_columns("mms_project_invitations")}
+    assert "email" not in columns
+    assert {"email_enc", "email_hash"} <= columns
+
+
+def test_reinvite_with_other_case_replaces_live_invite(client, db, make_user, login, mail_outbox):
+    """살아 있는 초대 하나만 (project_id, email_hash): 대소문자만 다른 이메일로 다시 초대하면 이전 초대가 무효"""
     project, hdrs = _owner_project(client, db, make_user, login)
-    _invite(client, project, hdrs, "old@example.com")
-    _invite(client, project, hdrs, "older@example.com")
-    # M1 이전에 만든 행처럼 암호화 칸을 비움
-    db.execute(text("UPDATE mms_project_invitations SET email_enc = NULL, email_hash = NULL"))
-    db.commit()
+    _invite(client, project, hdrs, "dana@example.com")
+    _invite(client, project, hdrs, "DANA@EXAMPLE.COM")
 
-    assert pii_backfill.backfill(db, dry_run=True) == 2
-    assert pii_backfill.backfill(db, batch_size=1) == 2
-    assert pii_backfill.backfill(db, dry_run=True) == 0
-
-    db.expire_all()
-    rows = db.scalars(select(ProjectInvitation).order_by(ProjectInvitation.id)).all()
-    assert [r.email_enc for r in rows] == ["old@example.com", "older@example.com"]
-    assert [r.email_hash for r in rows] == [email_index("old@example.com"), email_index("older@example.com")]
-
-
-def test_backfill_command_dry_run_succeeds(db):
-    assert pii_backfill.main(["--dry-run"]) == 0
-
-
-def test_backfill_command_loads_related_tables_on_its_own():
-    """명령으로 따로 실행하면 앱 전체 모델이 안 올라옴. 초대가 가리키는 테이블도 직접 불러와야 저장할 수 있음
-    (2026-11-19 운영 pii-backfill 이 NoReferencedTableError: mms_projects 로 실패했던 문제)"""
-    import subprocess
-    import sys
-
-    code = (
-        "import app.features.maemusae.invitations.pii_backfill\n"
-        "from app.features.maemusae.invitations.models import ProjectInvitation\n"
-        "ProjectInvitation.__mapper__.base_mapper._sorted_tables\n"
-    )
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
-    assert result.returncode == 0, result.stderr[-2000:]
+    pending = _pending(client, project, hdrs)
+    assert [p["email"] for p in pending] == ["dana@example.com"]

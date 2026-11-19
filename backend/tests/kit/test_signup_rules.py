@@ -1,6 +1,7 @@
 """가입 규칙: 이메일 인증, 약관 동의, 아이디 확인"""
 
 from app.core.config import settings
+from app.crypto import email_index
 
 
 def test_terms_endpoint_lists_current_terms(client):
@@ -84,7 +85,7 @@ def test_expired_code_rejected(client, db, last_code):
 
     client.post("/api/auth/email/send-code", json={"email": "a@example.com"})
     code = last_code()
-    row = db.query(EmailVerification).filter_by(email="a@example.com").one()
+    row = db.query(EmailVerification).filter_by(email_hash=email_index("a@example.com")).one()
     row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
     db.commit()
     response = client.post("/api/auth/email/verify-code", json={"email": "a@example.com", "code": code})

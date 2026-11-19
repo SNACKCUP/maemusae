@@ -14,6 +14,7 @@ from app.auth.models import (
     PasswordResetToken,
     RefreshToken,
 )
+from app.crypto import email_index
 from app.users.models import User
 
 
@@ -30,7 +31,7 @@ def email_codes_since(db: Session, email: str, since: datetime) -> tuple[int, da
             func.count(EmailVerification.id),
             func.min(EmailVerification.created_at),
             func.max(EmailVerification.created_at),
-        ).where(EmailVerification.email == email, EmailVerification.created_at >= since)
+        ).where(EmailVerification.email_hash == email_index(email), EmailVerification.created_at >= since)
     ).one()
     return row[0], row[1], row[2]
 
@@ -40,7 +41,7 @@ def latest_pending_email_code(db: Session, email: str) -> EmailVerification | No
     return db.scalar(
         select(EmailVerification)
         .where(
-            EmailVerification.email == email,
+            EmailVerification.email_hash == email_index(email),
             EmailVerification.verified_at.is_(None),
             EmailVerification.used_at.is_(None),
         )

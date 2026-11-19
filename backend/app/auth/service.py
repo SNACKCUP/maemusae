@@ -32,6 +32,7 @@ from app.core.security import (
     verify_dummy_password,
     verify_password,
 )
+from app.crypto import InvalidPhoneError, email_index
 from app.mail import send_mail
 from app.users import repository
 from app.users import service as user_service
@@ -235,7 +236,7 @@ def send_email_code(db: Session, tasks: BackgroundTasks, email: str) -> None:
     auth_repository.add(
         db,
         EmailVerification(
-            email=email,
+            email_hash=email_index(email),
             code_hash=hash_secret(code),
             expires_at=now + timedelta(minutes=settings.email_code_expire_minutes),
             created_at=now,
@@ -280,7 +281,7 @@ def issue_verified_email_proof(db: Session, email: str) -> str:
         raise AuthError("EMAIL_TAKEN", "이미 가입된 이메일입니다.")
     now = _now()
     row = EmailVerification(
-        email=email,
+        email_hash=email_index(email),
         code_hash=hash_secret(generate_token()),  # 입력할 번호가 없으므로 아무도 모르는 값
         expires_at=now,
         verified_at=now,
@@ -325,6 +326,24 @@ def request_login_id(db: Session, tasks: BackgroundTasks, email: str) -> None:
     user = repository.get_by_email(db, email.strip().lower())
     if user is None or not user.is_active or user.deactivated_at is not None or user.deleted_at is not None:
         return
+    _send_login_id_mail(db, tasks, user)
+
+
+def request_login_id_by_phone(db: Session, tasks: BackgroundTasks, name: str, phone: str) -> None:
+    """이름과 전화번호가 맞는 계정마다 가입한 이메일로 아이디를 보냅니다 (계획 23 §8-2, 1단계).
+
+    맞든 틀리든, 번호 형식이 틀려도 조용히 끝납니다 (가입 여부를 알려 주지 않음). 로그에는 회원 번호만 남깁니다.
+    """
+    try:
+        users = repository.active_by_name_and_phone(db, name.strip(), phone)
+    except InvalidPhoneError:
+        return
+    for user in users:
+        _send_login_id_mail(db, tasks, user)
+
+
+def _send_login_id_mail(db: Session, tasks: BackgroundTasks, user: User) -> None:
+    """아이디 메일 1통 (같은 회원 60초 간격·하루 10회, 이메일·전화번호 찾기가 같은 한도를 씀)"""
     count, first, last = auth_repository.login_id_mails_since(db, user.id, _now() - timedelta(days=1))
     if mail_retry_after(count, first, last) is not None:
         logger.info("아이디 찾기 메일 제한으로 건너뜀 user_id=%s", user.id)

@@ -10,7 +10,6 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
-    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -59,7 +58,8 @@ class User(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     # 로그인 아이디. API에서는 user_id 라는 이름으로 주고받습니다 (PK id, user_roles.user_id와 구분)
     login_id: Mapped[str] = mapped_column(String(30), unique=True, index=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    # 이메일 (암호화 칸 email_enc, 읽으면 평문). 찾기·중복 확인은 email_hash 로 (아래 개인정보 칸 설명)
+    email: Mapped[str] = mapped_column("email_enc", EncryptedString("users.email"))
     hashed_password: Mapped[str] = mapped_column(String(255))  # 원문 비밀번호는 저장하지 않음
     # false면 소셜 로그인으로만 가입해 비밀번호가 없는 계정 (hashed_password 는 아무도 모르는 값의 해시)
     has_password: Mapped[bool] = mapped_column(Boolean, server_default=true())
@@ -68,29 +68,24 @@ class User(TimestampMixin, Base):
 
     # 가입 때 선택적으로 받는 항목 (프론트 meerkit.config.ts의 signup.optionalFields)
     nickname: Mapped[str | None] = mapped_column(String(30), unique=True)
-    phone: Mapped[str | None] = mapped_column(String(20))
-    postcode: Mapped[str | None] = mapped_column(String(10))
-    address: Mapped[str | None] = mapped_column(String(255))
-    address_detail: Mapped[str | None] = mapped_column(String(255))
-    birth_date: Mapped[date | None] = mapped_column(Date)
-    gender: Mapped[str | None] = mapped_column(String(10))
+    # 아래 5개도 암호화 칸입니다 (속성 이름은 그대로, DB 칸은 *_enc). 전화번호는 E.164(+821012345678)로 저장
+    phone: Mapped[str | None] = mapped_column("phone_enc", EncryptedString("users.phone"))
+    postcode: Mapped[str | None] = mapped_column("postcode_enc", EncryptedString("users.postcode"))
+    address: Mapped[str | None] = mapped_column("address_enc", EncryptedString("users.address"))
+    address_detail: Mapped[str | None] = mapped_column("address_detail_enc", EncryptedString("users.address_detail"))
+    birth_date: Mapped[date | None] = mapped_column("birth_date_enc", EncryptedDate("users.birth_date"))
+    gender: Mapped[str | None] = mapped_column(String(10))  # 통계용 평문 (계획 23 D5)
     avatar_url: Mapped[str | None] = mapped_column(String(500))  # 브라우저에서 여는 공개 주소 (app.storage)
     avatar_key: Mapped[str | None] = mapped_column(String(200))  # 저장소 안의 파일 key (교체·삭제할 때 씀)
 
-    # 개인정보 암호화 칸 (계획 23). 지금(K2)은 위 평문 칸이 기준이고, 저장할 때 아래 칸을 자동으로 같이 채웁니다
-    # (맨 아래 before_insert/before_update 이벤트 → app.users.pii). 읽기는 다음 단계(K3)에서 이 칸으로 옮깁니다.
-    # DB 에는 암호문(bytea)만 들어가고, 읽으면 평문으로 풀립니다. 괄호 안 문자열(aad)은 바꾸지 않습니다.
-    email_enc: Mapped[str | None] = mapped_column(EncryptedString("users.email"))
-    email_hash: Mapped[str | None] = mapped_column(String(64), index=True)  # 이메일 지문 (K3 에서 UNIQUE·NOT NULL)
-    phone_enc: Mapped[str | None] = mapped_column(EncryptedString("users.phone"))  # E.164 (+821012345678)
-    phone_hash: Mapped[str | None] = mapped_column(String(64), index=True)  # 형식이 틀린 옛 번호는 비어 있음
+    # 개인정보 암호화 (계획 23). DB 에는 암호문(bytea)만, 읽으면 평문으로 풀립니다. 괄호 안 문자열(aad)은 바꾸지 않습니다.
+    # 암호화 칸은 WHERE·정렬에 쓸 수 없어(쓰면 TypeError) 찾을 때는 지문 칸을 씁니다: email_index()·phone_index()
+    # 저장할 때 맨 아래 이벤트(app.users.pii)가 지문·birth_year·키 버전을 자동으로 맞춥니다.
+    email_hash: Mapped[str] = mapped_column(String(64), unique=True)  # 이메일 지문 (가입 중복은 이 UNIQUE 가 막음)
+    phone_hash: Mapped[str | None] = mapped_column(String(64), index=True)  # 형식이 틀린 옛 번호는 비어 있음. 중복 허용
     phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # SMS 인증 (향후)
-    birth_date_enc: Mapped[date | None] = mapped_column(EncryptedDate("users.birth_date"))
     birth_year: Mapped[int | None] = mapped_column(SmallInteger)  # 나이 통계용 평문 (나이는 조회 때 계산)
-    postcode_enc: Mapped[str | None] = mapped_column(EncryptedString("users.postcode"))
-    address_enc: Mapped[str | None] = mapped_column(EncryptedString("users.address"))
-    address_detail_enc: Mapped[str | None] = mapped_column(EncryptedString("users.address_detail"))
-    pii_key_version: Mapped[int | None] = mapped_column(SmallInteger)  # 이 행을 암호화한 키 버전 (비면 아직 안 채운 행)
+    pii_key_version: Mapped[int] = mapped_column(SmallInteger)  # 이 행을 암호화한 키 버전
 
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 이메일 인증을 마친 시각
     # 로그인 잠금: 연속 실패 횟수와 잠금이 풀리는 시각
@@ -149,20 +144,17 @@ class UserTermAgreement(Base):
     agreed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-# ---- 개인정보 암호화 칸 자동 채우기 (계획 23 K2) ----
-
-
-def _changed_fields(user: User) -> set[str]:
-    state = inspect(user)
-    return {name for name in pii.PLAIN_PII_FIELDS if state.attrs[name].history.has_changes()}
+# ---- 개인정보 암호화 칸 자동 맞추기 (계획 23, app.users.pii) ----
 
 
 @event.listens_for(User, "before_insert")
 def _sync_pii_on_insert(mapper, connection, user: User) -> None:
-    pii.sync_encrypted_fields(user)
+    pii.sync_on_write(user, set(pii.PII_FIELDS))
 
 
 @event.listens_for(User, "before_update")
 def _sync_pii_on_update(mapper, connection, user: User) -> None:
-    if pii.needs_sync(user, _changed_fields(user)):
-        pii.sync_encrypted_fields(user)
+    state = inspect(user)
+    changed = {name for name in pii.PII_FIELDS if state.attrs[name].history.has_changes()}
+    if changed:
+        pii.sync_on_write(user, changed)
