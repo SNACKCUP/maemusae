@@ -4,10 +4,11 @@ from pathlib import Path
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 
 # 공통 기반(킷)의 층. 각 패키지는 오른쪽에 적은 패키지만 import 할 수 있습니다.
-# 의존 방향: core ← users ← auth ← permissions ← account,  mail·llm·storage·codes 는 core 만.
+# 의존 방향: core ← users ← auth ← permissions ← account,  mail·llm·storage·codes·crypto 는 core 만.
 # 권한 검사(require_admin 등)는 core 에 있어서 codes 도 core 만으로 관리자 API 를 둡니다.
 # social(소셜 로그인)은 auth 의 토큰·쿠키를 재사용하고, social 을 import 하는 킷은 없습니다.
 # users 는 프로필 이미지 파일을 위해 storage 를 씁니다 (auth 가 mail 을 쓰는 것과 같은 방식).
+# crypto(개인정보 암호화)는 core 만 쓰고, 개인정보를 저장·검색하는 users·auth·social 이 crypto 를 씁니다 (계획 23, 2026-11-16 협의).
 # 이 표를 바꾸려면 팀과 먼저 협의합니다 (공통 모듈은 서로 최대한 독립).
 ALLOWED_KIT_IMPORTS: dict[str, set[str]] = {
     "core": set(),
@@ -15,11 +16,12 @@ ALLOWED_KIT_IMPORTS: dict[str, set[str]] = {
     "llm": {"core"},
     "storage": {"core"},
     "codes": {"core"},
-    "users": {"core", "storage"},
-    "auth": {"core", "users", "mail"},
+    "crypto": {"core"},
+    "users": {"core", "storage", "crypto"},
+    "auth": {"core", "users", "mail", "crypto"},
     "permissions": {"core", "users", "auth"},
     "account": {"core", "users", "auth", "permissions"},
-    "social": {"core", "users", "auth"},
+    "social": {"core", "users", "auth", "crypto"},
 }
 KIT_PACKAGES = list(ALLOWED_KIT_IMPORTS)
 APP_IMPORT = re.compile(r"^\s*(?:from|import)\s+app\.([a-z_]+)", re.MULTILINE)

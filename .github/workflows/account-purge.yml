@@ -8,6 +8,7 @@
 #   - Secret  DATABASE_URL            운영 DB 주소 (GitHub 러너에서 접속할 수 있어야 함)
 #   - Variable ACCOUNT_RETENTION_DAYS  (선택) 기본 365
 #   - Variable MMS_PROJECT_RETENTION_DAYS (선택) 기본 180
+#   - Secret  PII_ENCRYPTION_KEYS, PII_HMAC_KEY  개인정보 암호화 키 (Render 와 같은 값. 익명화할 때 암호화 칸도 다시 씀)
 #   - 매무새 원본 삭제용 (Render 서버와 같은 값):
 #       Secret   STORAGE_S3_ACCESS_KEY_ID, STORAGE_S3_SECRET_ACCESS_KEY
 #       Variable STORAGE_S3_ENDPOINT_URL, STORAGE_S3_REGION, STORAGE_PRIVATE_BUCKET(기본 meerkit-private)
@@ -53,6 +54,9 @@ jobs:
       STORAGE_PRIVATE_BUCKET: ${{ vars.STORAGE_PRIVATE_BUCKET || 'meerkit-private' }}
       STORAGE_S3_ACCESS_KEY_ID: ${{ secrets.STORAGE_S3_ACCESS_KEY_ID }}
       STORAGE_S3_SECRET_ACCESS_KEY: ${{ secrets.STORAGE_S3_SECRET_ACCESS_KEY }}
+      # 회원을 저장할 때 개인정보 암호화 칸을 같이 채우므로 키가 필요합니다 (Render 와 같은 값, 저장소 Secrets)
+      PII_ENCRYPTION_KEYS: ${{ secrets.PII_ENCRYPTION_KEYS }}
+      PII_HMAC_KEY: ${{ secrets.PII_HMAC_KEY }}
     steps:
       - uses: actions/checkout@v4
       - name: Check DATABASE_URL secret

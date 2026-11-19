@@ -2,10 +2,11 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, event, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.crypto import email_index
 
 
 # 가입 전 이메일 인증번호. 번호는 해시로만 저장하고, 확인에 성공하면 verified_at, 가입에 쓰이면 used_at을 기록합니다.
@@ -15,6 +16,8 @@ class EmailVerification(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), index=True)
+    # 이메일 지문 (계획 23). 지금(K2)은 저장할 때 자동으로 같이 채우고, K3 에서 찾기를 이 칸으로 옮긴 뒤 email 칸을 지웁니다
+    email_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     code_hash: Mapped[str] = mapped_column(String(64))  # 6자리 번호의 해시 (원문은 메일로만 보냄)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # 이 시각이 지나면 무효
     attempts: Mapped[int] = mapped_column(Integer, server_default="0")  # 틀린 횟수
@@ -66,3 +69,8 @@ class RefreshToken(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 로그아웃·회전·전체 폐기 시각
     replaced_by_id: Mapped[int | None] = mapped_column(Integer)  # 회전으로 바뀐 새 토큰 행 (재사용 감지용)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+@event.listens_for(EmailVerification, "before_insert")
+def _fill_email_hash(mapper, connection, row: EmailVerification) -> None:
+    row.email_hash = email_index(row.email)
