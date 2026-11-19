@@ -12,6 +12,9 @@ import sys
 
 from sqlalchemy.orm import Session
 
+# 명령으로 따로 실행하면 앱 전체 모델이 올라오지 않으므로, 초대가 가리키는 테이블(mms_projects·users)을 직접 불러옴
+import app.features.maemusae.projects.models
+import app.users.models  # noqa: F401
 from app.core.database import SessionLocal
 from app.core.logging import setup_logging
 from app.features.maemusae.invitations import repository
