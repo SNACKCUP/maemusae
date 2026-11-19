@@ -26,7 +26,9 @@ router = APIRouter(prefix="/users", tags=["users (admin)"])
     "",
     response_model=UserPage,
     dependencies=[Depends(require_admin)],
-    summary="멤버 검색 (아이디·이름·이메일·닉네임, 역할·상태 필터, 페이지)",
+    summary="멤버 검색 (아이디·이름·닉네임 포함 검색, 이메일은 전체 주소로 정확히, 역할·상태 필터, 페이지)",
+    description="q 에 @ 가 있으면 이메일 전체 주소와 정확히 같은 회원만 찾습니다 (이메일은 암호화되어 부분 검색 불가). "
+    "목록의 이메일은 가려서 보내고, 전체 주소는 GET /users/{user_id} 로 봅니다.",
 )
 def list_users(
     q: Annotated[str | None, Query(max_length=100)] = None,
@@ -45,6 +47,13 @@ def list_users(
 @router.get("/roles", response_model=list[RoleRead], summary="역할 목록")
 def list_roles(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return service.list_roles(db)
+
+
+@router.get(
+    "/{user_id}", response_model=UserRead, dependencies=[Depends(require_admin)], summary="멤버 한 명 (이메일 전체)"
+)
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    return service.get_user_for_admin(db, user_id)
 
 
 @router.put("/{user_id}/roles", response_model=UserRead, dependencies=[Depends(require_admin)], summary="역할 변경")

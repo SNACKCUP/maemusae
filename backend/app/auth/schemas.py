@@ -141,6 +141,17 @@ class ForgotIdRequest(BaseModel):
     email: str = Field(max_length=255, description="가입한 이메일", examples=["kim@example.com"])
 
 
+class ForgotIdByPhoneRequest(BaseModel):
+    """전화번호로 아이디 찾기. 맞는 계정이 있으면 가입한 이메일로 아이디를 보냅니다 (화면에는 보여 주지 않음).
+
+    가입 때 번호를 확인하지 않으므로 화면에 바로 보여 주면 남의 번호를 적은 사람이 아이디를 알 수 있습니다 (계획 23 §8).
+    """
+
+    name: str = Field(max_length=50, description="가입할 때 적은 이름", examples=["김미어"])
+    # 형식이 틀려도 같은 응답을 주려고 여기서 검사하지 않습니다
+    phone: str = Field(max_length=30, description="가입할 때 적은 전화번호", examples=["010-1234-5678"])
+
+
 class ForgotPasswordRequest(BaseModel):
     """비밀번호 재설정 메일 요청. 가입 여부와 상관없이 같은 응답을 줍니다 (가입 여부를 알려 주지 않음)."""
 

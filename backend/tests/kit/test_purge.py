@@ -16,7 +16,7 @@ def _withdrawn(db, make_user, login_id, days_ago, **fields):
 
 def test_purge_anonymizes_only_expired_accounts(client, db, make_user):
     old = _withdrawn(
-        db, make_user, "old01", settings.account_retention_days + 1, nickname="옛닉", phone="010-1"
+        db, make_user, "old01", settings.account_retention_days + 1, nickname="옛닉", phone="010-1234-5678"
     )
     recent = _withdrawn(db, make_user, "recent01", settings.account_retention_days - 1)
     active = make_user("active01")

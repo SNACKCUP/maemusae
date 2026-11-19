@@ -38,20 +38,20 @@ def test_removes_reset_tokens_of_withdrawn_users_only(db, make_user):
 
 def test_removes_old_email_verifications(db):
     old = EmailVerification(
-        email="x@example.com",
+        email_hash="x" * 64,
         code_hash="h",
         expires_at=datetime.now(UTC),
         created_at=datetime.now(UTC) - timedelta(days=settings.email_verification_retention_days + 1),
     )
     fresh = EmailVerification(
-        email="y@example.com", code_hash="h", expires_at=datetime.now(UTC), created_at=datetime.now(UTC)
+        email_hash="y" * 64, code_hash="h", expires_at=datetime.now(UTC), created_at=datetime.now(UTC)
     )
     db.add_all([old, fresh])
     db.commit()
 
     assert cleanup(db, dry_run=True)["email_verifications"] == 1
     assert cleanup(db)["email_verifications"] == 1
-    assert {row.email for row in db.query(EmailVerification).all()} == {"y@example.com"}
+    assert {row.email_hash for row in db.query(EmailVerification).all()} == {"y" * 64}
 
 
 def test_main_dry_run_exit_code(monkeypatch):

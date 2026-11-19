@@ -1,7 +1,16 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_serializer,
+    field_validator,
+)
+
+from app.users.pii import display_phone, mask_email, mask_phone, mask_place
 
 OPTIONAL_PROFILE_FIELDS = (
     "nickname",
@@ -62,6 +71,42 @@ class UserRead(BaseModel):
         default=None, description="보관 기간(365일)이 지나 개인정보를 지운 시각", examples=[None]
     )
 
+    @field_serializer("phone")
+    def _phone_for_display(self, phone: str | None) -> str | None:
+        # DB 에는 +821012345678 로 저장. 응답은 지금처럼 010-1234-5678
+        return display_phone(phone)
+
+
+class UserListItem(UserRead):
+    """관리자 멤버 목록의 한 줄. 개인정보는 가려서 보냅니다 (계획 23 D7). 전체 값은 GET /users/{user_id} 에서만.
+
+    이메일 ki*******@example.com, 전화번호 010-****-5678, 우편번호 06***, 주소 서울 강남구 ***,
+    상세 주소 ***, 생년월일 1995-**-** (태어난 해만). 이름·닉네임·성별은 그대로.
+    """
+
+    email: str = Field(description="가린 이메일", examples=["ki*@example.com"])
+    phone: str | None = Field(default=None, description="가린 전화번호", examples=["010-****-5678"])
+    postcode: str | None = Field(default=None, description="가린 우편번호", examples=["06***"])
+    address: str | None = Field(default=None, description="가린 주소 (앞 두 단어만)", examples=["서울 강남구 ***"])
+    address_detail: str | None = Field(default=None, description="가린 상세 주소", examples=["***"])
+    birth_date: date | None = Field(default=None, description="태어난 해만 (YYYY-**-**)", examples=["1995-**-**"])
+
+    @field_serializer("email")
+    def _masked_email(self, email: str) -> str:
+        return mask_email(email)
+
+    @field_serializer("phone")
+    def _phone_for_display(self, phone: str | None) -> str | None:  # 부모의 같은 이름 함수를 덮어씀
+        return mask_phone(display_phone(phone))
+
+    @field_serializer("postcode", "address", "address_detail")
+    def _masked_place(self, value: str | None, info) -> str | None:
+        return mask_place(value, keep_words=2 if info.field_name == "address" else 0, keep_chars=2 if info.field_name == "postcode" else 0)
+
+    @field_serializer("birth_date")
+    def _birth_year_only(self, value: date | None) -> str | None:
+        return f"{value.year}-**-**" if value is not None else None
+
 
 class RolesUpdate(BaseModel):
     """회원의 역할을 통째로 바꿉니다 (보낸 목록이 새 역할 전체)."""
@@ -82,7 +127,7 @@ class ActiveUpdate(BaseModel):
 class UserPage(BaseModel):
     """멤버 검색 결과 한 페이지"""
 
-    items: list[UserRead] = Field(description="이 페이지의 회원 목록")
+    items: list[UserListItem] = Field(description="이 페이지의 회원 목록 (이메일은 가림)")
     total: int = Field(description="조건에 맞는 전체 회원 수", examples=[42])
     page: int = Field(description="지금 페이지 (1부터)", examples=[1])
     size: int = Field(description="페이지당 개수", examples=[20])

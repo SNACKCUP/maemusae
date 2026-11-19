@@ -8,6 +8,7 @@ from datetime import datetime
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.crypto import email_index, phone_index
 from app.users.models import Role, Term, User, UserTermAgreement
 
 
@@ -22,8 +23,26 @@ def get_by_login_id(db: Session, login_id: str) -> User | None:
 
 
 def get_by_email(db: Session, email: str) -> User | None:
-    """이메일로 회원 1명 (가입 중복 확인, 비밀번호 찾기)"""
-    return db.scalar(select(User).where(User.email == email))
+    """이메일로 회원 1명 (가입 중복 확인, 비밀번호 찾기). 대소문자·앞뒤 공백은 무시. 지문(email_hash)으로 찾습니다"""
+    return db.scalar(select(User).where(User.email_hash == email_index(email)))
+
+
+def active_by_name_and_phone(db: Session, name: str, phone: str) -> list[User]:
+    """이름과 전화번호가 같은 사용 중 회원 (전화번호로 아이디 찾기). 번호는 지문으로, 같은 번호를 여러 계정이 쓸 수 있음.
+
+    phone 형식이 틀리면 InvalidPhoneError (부르는 쪽이 "없음"과 같게 처리)
+    """
+    return list(
+        db.scalars(
+            select(User).where(
+                User.phone_hash == phone_index(phone),
+                User.name == name,
+                User.is_active.is_(True),
+                User.deactivated_at.is_(None),
+                User.deleted_at.is_(None),
+            ).order_by(User.id)
+        )
+    )
 
 
 def get_by_nickname(db: Session, nickname: str) -> User | None:
@@ -48,19 +67,20 @@ def search(
 ) -> tuple[list[User], int]:
     """멤버 검색 (관리자 화면). (이번 페이지 목록, 전체 개수)를 돌려줍니다.
 
-    q: 아이디·이름·이메일·닉네임 중 하나라도 포함
+    q: 아이디·이름·닉네임 중 하나라도 포함. @ 가 있으면 이메일 전체 주소로 정확히 찾기 (이메일은 암호화되어 부분 검색 불가)
     role_id: 이 역할을 가진 사람만
     status: active(사용 중) / inactive(관리자가 막음) / deleted(탈퇴)
     정렬: 최근 가입 순
     """
     stmt = select(User)
-    if q:
+    if q and "@" in q:
+        stmt = stmt.where(User.email_hash == email_index(q))
+    elif q:
         pattern = _like(q)
         stmt = stmt.where(
             or_(
                 User.login_id.ilike(pattern, escape="\\"),
                 User.name.ilike(pattern, escape="\\"),
-                User.email.ilike(pattern, escape="\\"),
                 User.nickname.ilike(pattern, escape="\\"),
             )
         )
@@ -122,34 +142,6 @@ def count_withdrawn_before(db: Session, cutoff: datetime) -> int:
     return (
         db.scalar(
             select(func.count(User.id)).where(User.deactivated_at <= cutoff, User.deleted_at.is_(None))
-        )
-        or 0
-    )
-
-
-# ---- 개인정보 암호화 칸 채우기 (계획 23 K2, app.users.pii_backfill) ----
-
-
-def pii_unsynced_batch(db: Session, after_id: int, limit: int) -> list[User]:
-    """암호화 칸을 아직 한 번도 채우지 않은 회원 (pii_key_version 이 빈 행), id 순"""
-    return list(
-        db.scalars(
-            select(User).where(User.pii_key_version.is_(None), User.id > after_id).order_by(User.id).limit(limit)
-        )
-    )
-
-
-def count_pii_unsynced(db: Session) -> int:
-    return db.scalar(select(func.count()).select_from(User).where(User.pii_key_version.is_(None))) or 0
-
-
-def count_phone_without_hash(db: Session) -> int:
-    """전화번호는 있는데 지문이 없는 회원 (형식이 틀린 옛 번호). 전화번호 찾기에서 빠짐"""
-    return (
-        db.scalar(
-            select(func.count())
-            .select_from(User)
-            .where(User.phone.is_not(None), User.phone != "", User.phone_hash.is_(None), User.pii_key_version.is_not(None))
         )
         or 0
     )

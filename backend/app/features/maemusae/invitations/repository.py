@@ -2,9 +2,10 @@
 
 from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.crypto import email_index
 from app.features.maemusae.invitations.models import ProjectInvitation
 from app.users.models import User
 
@@ -23,7 +24,7 @@ def revoke_live(db: Session, project_id: int, email: str, now: datetime) -> None
         update(ProjectInvitation)
         .where(
             ProjectInvitation.project_id == project_id,
-            ProjectInvitation.email == email,
+            ProjectInvitation.email_hash == email_index(email),
             ProjectInvitation.accepted_at.is_(None),
             ProjectInvitation.revoked_at.is_(None),
         )
@@ -60,8 +61,8 @@ def get_live_by_token_hash(
 
 
 def get_user_by_email(db: Session, email: str) -> User | None:
-    # 킷은 이메일을 소문자로 저장합니다 (users.service)
-    return db.scalar(select(User).where(User.email == email))
+    # 회원 이메일은 암호화 칸이라 지문으로 찾습니다 (app.crypto.email_index 는 소문자로 맞춘 뒤 지문을 만듦)
+    return db.scalar(select(User).where(User.email_hash == email_index(email)))
 
 
 def get_user(db: Session, user_id: int) -> User | None:
@@ -72,24 +73,3 @@ def add(db: Session, row: ProjectInvitation) -> None:
     db.add(row)
     db.flush()
 
-
-# ---- 이메일 암호화 칸 채우기 (계획 23 M1, app.features.maemusae.invitations.pii_backfill) ----
-
-
-def _email_pii_missing():
-    return ProjectInvitation.email_hash.is_(None)
-
-
-def email_pii_missing_batch(db: Session, after_id: int, limit: int) -> list[ProjectInvitation]:
-    return list(
-        db.scalars(
-            select(ProjectInvitation)
-            .where(_email_pii_missing(), ProjectInvitation.id > after_id)
-            .order_by(ProjectInvitation.id)
-            .limit(limit)
-        )
-    )
-
-
-def count_email_pii_missing(db: Session) -> int:
-    return db.scalar(select(func.count()).select_from(ProjectInvitation).where(_email_pii_missing())) or 0

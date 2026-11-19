@@ -16,6 +16,7 @@ from app.auth import service
 from app.auth.deps import get_current_user
 from app.auth.schemas import (
     EmailCodeRequest,
+    ForgotIdByPhoneRequest,
     ForgotIdRequest,
     ForgotPasswordRequest,
     LoginId,
@@ -148,6 +149,17 @@ def refresh(
 )
 def forgot_id(body: ForgotIdRequest, tasks: BackgroundTasks, db: Session = Depends(get_db)):
     service.request_login_id(db, tasks, body.email)
+
+
+@router.post(
+    "/id/forgot-by-phone",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="전화번호로 아이디 찾기 (이름+전화번호가 맞으면 가입한 이메일로 아이디를 보냄, 항상 204)",
+    description="아이디는 화면에 보여 주지 않고 계정 주인의 이메일로만 보냅니다. 맞는 계정이 없거나 번호 형식이 틀려도 "
+    "같은 204 를 돌려줘 가입 여부를 알 수 없게 합니다. 같은 회원 60초 간격·하루 10회 (이메일 아이디 찾기와 같은 한도).",
+)
+def forgot_id_by_phone(body: ForgotIdByPhoneRequest, tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    service.request_login_id_by_phone(db, tasks, body.name, body.phone)
 
 
 @router.post(

@@ -45,7 +45,8 @@ def test_console_backend_hides_body_outside_local(caplog, monkeypatch):
     monkeypatch.setattr(settings, "app_env", "production")
     with caplog.at_level(logging.INFO, logger="app.mail"):
         send_mail("a@example.com", "email_code", {"code": "555111", "expire_minutes": 10})
-    assert "a@example.com" in caplog.text
+    assert "a***@example.com" in caplog.text  # 받는 주소는 로그 안전망이 가림 (app.core.logging.PiiRedactFilter)
+    assert "a@example.com" not in caplog.text
     assert "555111" not in caplog.text
 
 
