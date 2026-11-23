@@ -1,11 +1,19 @@
 export { MeerkitProvider } from "./providers/MeerkitProvider";
 export { WelcomePage } from "./welcome/WelcomePage";
 export { MePage, type MePageProps, type MePageTab } from "./auth/MePage";
-export { MeAvatarField, MeNicknameForm, MeProfileForm, MePasswordForm, MeWithdrawForm } from "./auth/MeSections";
+export {
+  MeAvatarField,
+  MeNicknameForm,
+  MeProfileForm,
+  MePasswordForm,
+  MeWithdrawForm,
+} from "./auth/MeSections";
 export { RequireAuth } from "./auth/guards/RequireAuth";
 export { RequireRole } from "./auth/guards/RequireRole";
 export { GuestOnly } from "./auth/guards/GuestOnly";
 export { useAuth } from "./auth/hooks";
+// export { useAuthDialog, type AuthDialogMode } from "./auth/dialog-store";
+export { useAuthDialog } from "./auth/dialog-store";
 export { AiPromptInput, type AiAgent } from "./ai/AiPromptInput";
 export { ThinkingIndicator } from "./ai/ThinkingIndicator";
 export { ThinkingOrb, ORB_STATES, type OrbState } from "./ai/ThinkingOrb";
@@ -16,7 +24,12 @@ export { useLogout } from "./auth/mutations";
 export { MemberTable } from "./admin/components/MemberTable";
 export { MemberDirectory } from "./admin/components/MemberDirectory";
 export { RoleAssignDialog } from "./admin/components/RoleAssignDialog";
-export { useMembers, useUpdateRoles, useUpdateActive, useRemoveMember } from "./admin/queries";
+export {
+  useMembers,
+  useUpdateRoles,
+  useUpdateActive,
+  useRemoveMember,
+} from "./admin/queries";
 export { meerkitConfig } from "./config";
 export { api } from "./api/client";
 export { errorMessage } from "./api/error";
@@ -26,12 +39,22 @@ export type { Role, User } from "./types";
 export { MemberAiUsage } from "./admin/components/MemberAiUsage";
 export { MemberAiUsageHistory } from "./admin/components/MemberAiUsageHistory";
 export type { AiUsage, UsagePeriod, UsagePoint } from "./admin/usage-status";
-export { Loader, LoadingState, LoadingOverlay, useDelayedLoading, LOADER_VARIANTS } from "./loading";
+export {
+  Loader,
+  LoadingState,
+  LoadingOverlay,
+  useDelayedLoading,
+  LOADER_VARIANTS,
+} from "./loading";
 export type { LoaderVariant, LoaderSize } from "./loading";
 export { Skeleton } from "@/components/ui/skeleton";
 export { VoiceGlow } from "./ai/VoiceGlow";
 export { VoiceButton } from "./ai/VoiceInput";
-export { useVoiceRecorder, type VoiceOptions, type VoiceStatus } from "./ai/use-voice-recorder";
+export {
+  useVoiceRecorder,
+  type VoiceOptions,
+  type VoiceStatus,
+} from "./ai/use-voice-recorder";
 export { Calendar, DatePicker, DateRangeLinked, DateRangePicker } from "./date";
 export { AuthPanel } from "./auth/components/AuthPanel";
 export { NotFoundPage } from "./status/NotFoundPage";
@@ -45,6 +68,23 @@ export { GoogleButton } from "./auth/components/GoogleButton";
 export { ApiKeyInput, type ApiKeyInputValue } from "./ai/ApiKeyInput";
 export { LlmPlayground } from "./ai/LlmPlayground";
 export { useLlmKeyStore } from "./ai/llm-key-store";
-export { MultiApiKeyList, MultiApiKeyTabs, type ApiKeySavePayload, type ApiKeySavedEntry, type ApiKeySettingsProps, type ApiKeySettingsValue } from "./ai/api-key-settings";
-export { failoverApiKeys, type FailoverResult, type FailoverState } from "./ai/api-key-failover";
-export { PROVIDERS, PROVIDER_IDS, type ModelOption, type ProviderId, type ProviderInfo } from "./ai/providers";
+export {
+  MultiApiKeyList,
+  MultiApiKeyTabs,
+  type ApiKeySavePayload,
+  type ApiKeySavedEntry,
+  type ApiKeySettingsProps,
+  type ApiKeySettingsValue,
+} from "./ai/api-key-settings";
+export {
+  failoverApiKeys,
+  type FailoverResult,
+  type FailoverState,
+} from "./ai/api-key-failover";
+export {
+  PROVIDERS,
+  PROVIDER_IDS,
+  type ModelOption,
+  type ProviderId,
+  type ProviderInfo,
+} from "./ai/providers";
