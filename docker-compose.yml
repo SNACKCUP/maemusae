@@ -7,8 +7,10 @@ services:
       POSTGRES_USER: starter
       POSTGRES_PASSWORD: starter
       POSTGRES_DB: starter
+    # ports:
+    #   - "5432:5432"
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     # `docker compose up --wait`가 DB가 진짜 준비될 때까지 기다리게 한다. 처음 만들 때 DB는 초기화 중에 한 번 재시작하므로,
