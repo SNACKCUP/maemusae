@@ -40,6 +40,26 @@ uv run uvicorn app.main:app --reload
 cd frontend && npm install && npm run dev
 ```
 
+### PostgreSQL 16 → 17 로 바뀌었습니다 (기존 로컬 DB가 있다면)
+
+운영 DB(RDS)와 CI에 맞춰 `docker-compose.yml`의 DB 이미지를 `postgres:17`로 올렸습니다. 예전에 16으로 만든 `pgdata` 볼륨이 남아 있으면 17 이미지가 그 데이터로 시작하지 못하고 오류를 냅니다.
+
+- **로컬 데이터를 지워도 될 때:** 볼륨을 지우고 새로 만듭니다.
+
+  ```bash
+  docker compose down -v      # pgdata 볼륨 삭제 (로컬 데이터가 사라집니다)
+  docker compose up -d --wait db
+  cd backend && uv run alembic upgrade head && uv run python -m app.users.seed
+  ```
+
+- **로컬 데이터를 남겨야 할 때:** 이미지를 바꾸기 전에(16으로 켜 둔 상태에서) 백업하고, 17로 새로 만든 뒤 복원합니다.
+
+  ```bash
+  docker compose exec -T db pg_dump -U starter -d starter -Fc > starter.dump   # 16에서 백업
+  docker compose down -v && docker compose up -d --wait db                     # 17로 새로 만들기
+  docker compose exec -T db pg_restore -U starter -d starter --no-owner < starter.dump
+  ```
+
 ## 알아 두세요
 
 - 사용 설명서는 별도 사이트로 배포됩니다. 이 프로젝트에는 설명서 화면이 들어 있지 않고, 웰컴 페이지만 있습니다. 설명서 사이트 주소를 `frontend/.env.example`의 `NEXT_PUBLIC_DOCS_URL`에 넣으면 웰컴 페이지에 Docs 버튼이 나타납니다.

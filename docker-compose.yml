@@ -1,8 +1,7 @@
 # 대체용 DB입니다. 기본 DB는 Supabase 로컬이며 루트에서 `npm run db:start`로 켭니다.
-# 이미지는 postgres:16으로 유지합니다. 기존 볼륨(pgdata)이 16 형식이라 17로 바꾸면 기존 데이터로 시작하지 못합니다.
 services:
   db:
-    image: postgres:16
+    image: postgres:17
     environment:
       POSTGRES_USER: starter
       POSTGRES_PASSWORD: starter
