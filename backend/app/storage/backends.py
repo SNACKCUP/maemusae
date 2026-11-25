@@ -65,21 +65,28 @@ class _S3Bucket:
         from botocore.config import Config
 
         s = storage_settings
-        if not (bucket and s.storage_s3_endpoint_url and s.storage_s3_access_key_id and s.storage_s3_secret_access_key):
+        # 버킷 이름만 있으면 켭니다. EKS Pod Identity 처럼 키를 주입하지 않는 환경에서는 boto3 가 자격 증명과
+        # 기본 AWS 엔드포인트를 스스로 찾습니다. 키·엔드포인트는 값이 있을 때만 넘깁니다 (MinIO·Supabase 등 키 기반 환경).
+        if not bucket:
             raise errors.not_configured()
         self.bucket = bucket
+        options: dict = {}
+        if s.storage_s3_endpoint_url:
+            options["endpoint_url"] = s.storage_s3_endpoint_url
+        if s.storage_s3_access_key_id and s.storage_s3_secret_access_key:
+            options["aws_access_key_id"] = s.storage_s3_access_key_id
+            options["aws_secret_access_key"] = s.storage_s3_secret_access_key
         self.client = boto3.client(
             "s3",
-            endpoint_url=s.storage_s3_endpoint_url,
-            region_name=s.storage_s3_region,
-            aws_access_key_id=s.storage_s3_access_key_id,
-            aws_secret_access_key=s.storage_s3_secret_access_key,
+            region_name=s.storage_s3_region or None,
             config=Config(
-                s3={"addressing_style": "path"},  # Supabase 는 버킷을 주소 경로에 둡니다
+                # Supabase·MinIO 같은 S3 호환 저장소는 버킷을 주소 경로에 둡니다. AWS 기본 엔드포인트는 boto3 기본값을 씁니다.
+                s3={"addressing_style": "path"} if s.storage_s3_endpoint_url else {},
                 connect_timeout=s.storage_timeout_seconds,
                 read_timeout=s.storage_timeout_seconds,
                 retries={"max_attempts": 2},
             ),
+            **options,
         )
 
     def _call(self, action: str, key: str, **kwargs) -> dict:

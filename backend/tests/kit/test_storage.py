@@ -15,11 +15,12 @@ def test_empty_backend_is_not_configured(monkeypatch):
         get_storage()
 
 
-def test_s3_without_keys_is_not_configured(monkeypatch):
-    monkeypatch.setattr(storage_settings, "storage_backend", "s3")
-    monkeypatch.setattr(storage_settings, "storage_s3_endpoint_url", "")
+def test_s3_without_bucket_is_not_configured(monkeypatch):
+    from app.storage.backends import S3Storage
+
+    monkeypatch.setattr(storage_settings, "storage_bucket", "")
     with pytest.raises(StorageNotConfiguredError):
-        get_storage()
+        S3Storage()
 
 
 def test_memory_backend_roundtrip(monkeypatch):
@@ -176,3 +177,67 @@ def test_s3_private_missing_file_is_not_found(monkeypatch):
         with pytest.raises(StorageError) as caught:
             storage.get("docs/gone.pdf")
     assert caught.value.code == "STORAGE_OBJECT_NOT_FOUND"
+
+
+def _pod_identity(monkeypatch):
+    """EKS Pod Identity 환경: 버킷·리전만 있고 키·엔드포인트는 없음. boto3 는 환경의 자격 증명을 씁니다 (테스트에선 가짜 값)."""
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "pod-identity-test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "pod-identity-test")
+    for name, value in {
+        "storage_s3_endpoint_url": "",
+        "storage_s3_access_key_id": "",
+        "storage_s3_secret_access_key": "",
+        "storage_s3_region": "ap-northeast-2",
+        "storage_bucket": "uploads",
+        "storage_private_bucket": "uploads-private",
+        "storage_public_base_url": "https://uploads.s3.ap-northeast-2.amazonaws.com",
+    }.items():
+        monkeypatch.setattr(storage_settings, name, value)
+
+
+def test_s3_bucket_only_uploads_without_keys_or_endpoint(monkeypatch):
+    from botocore.stub import Stubber
+
+    from app.storage.backends import S3PrivateStorage, S3Storage
+
+    _pod_identity(monkeypatch)
+    storage = S3Storage()
+    # 엔드포인트를 넘기지 않았으므로 기본 AWS 주소, 키도 설정값이 아닌 환경(Pod Identity 자리)에서 옴
+    assert storage.client.meta.endpoint_url == "https://s3.ap-northeast-2.amazonaws.com"
+    assert storage.client._request_signer._credentials.access_key == "pod-identity-test"
+    with Stubber(storage.client) as stub:
+        stub.add_response(
+            "put_object",
+            {},
+            {
+                "Bucket": "uploads",
+                "Key": "avatars/a.webp",
+                "Body": b"img",
+                "ContentType": "image/webp",
+                "CacheControl": "public, max-age=31536000, immutable",
+            },
+        )
+        storage.put("avatars/a.webp", b"img", "image/webp")
+        stub.assert_no_pending_responses()
+
+    private = S3PrivateStorage()
+    with Stubber(private.client) as stub:
+        stub.add_response(
+            "put_object",
+            {},
+            {
+                "Bucket": "uploads-private",
+                "Key": "docs/a.pdf",
+                "Body": b"pdf",
+                "ContentType": "application/pdf",
+                "CacheControl": "private, no-store",
+            },
+        )
+        private.put("docs/a.pdf", b"pdf", "application/pdf")
+        stub.assert_no_pending_responses()
+
+
+def test_s3_key_based_settings_still_passed_to_boto3(monkeypatch):
+    storage = _s3(monkeypatch)
+    assert storage.client.meta.endpoint_url == "http://127.0.0.1:54321/storage/v1/s3"
+    assert storage.client._request_signer._credentials.access_key == "test-key"
